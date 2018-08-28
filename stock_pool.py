@@ -45,8 +45,44 @@ def basic_info_step1_check(code, year, quarter):
     主营业务增速增加三个季度
     净利润增速大于20%三个季度
     主营业务增速大于20%三个季度
+    每股收益增长率大于20%三个季度
     '''
-    return has_profit_than_x_for_n_quarters(code ,year, quarter, 3, 0) and growth_bigger_than_last_for_n_quarters(code, year, quarter, 3, 'nprg') and growth_bigger_than_last_for_n_quarters(code, year, quarter, 3, 'mbrg') and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'nprg') and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'mbrg')
+    return has_profit_than_x_for_n_quarters(code ,year, quarter, 3, 0) and growth_bigger_than_last_for_n_quarters(code, year, quarter, 3, 'nprg') and growth_bigger_than_last_for_n_quarters(code, year, quarter, 3, 'mbrg') and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'nprg') and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'mbrg') and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'epsg')
+
+def basic_inf_step2_check(code, year, quarter):
+    '''
+    基本面的算法
+    盈利三个季度
+    净利润增速增加三个季度
+    主营业务增速增加三个季度
+    sma净利润增速大于20%三个季度
+    sma主营业务增速大于20%三个季度
+    sma每股收益增长率大于20%三个季度
+    '''
+    return has_profit_than_x_for_n_quarters(code ,year, quarter, 3, 0) and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'nprg') and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'mbrg') and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'epsg') and growth_bigger_than_last_for_n_quarters_thru_sma(code, year, quarter, 3, 'nprg') and growth_bigger_than_last_for_n_quarters_thru_sma(code, year, quarter, 3, 'mbrg')
+
+def growth_bigger_than_last_for_n_quarters_thru_sma(code, year, quarter, n, column='nprg', step=2):
+    '''
+    计算增长sma加速
+    '''
+    df = get_growth_data_df_thru_code(code, year, quarter, n + step)
+    df = add_sma(df, column, step)
+    k = "SMA_%s_%s"%(column, step)
+    df = df.sort_index(ascending=True)
+    sma_column = df.loc[:, [k]]
+    diff_df = sma_column.diff()
+    diff_df = diff_df.sort_index(ascending=True).iloc[step:]
+    return (diff_df[k] > 0).all()
+
+
+def add_sma(df, column, step=2):
+    '''
+    添加column的step大小的sma
+    添加的column名字为 ``"SMA_%s_%s"%(column, step)``
+    '''
+    df = df.sort_index(ascending=True)
+    df["SMA_%s_%s"%(column, step)] = ta.SMA(df[column].values, timeperiod=step)
+    return df
 
 def has_basic_info_for_n_quarters(code, year, quarter, n):
     '''
@@ -89,7 +125,7 @@ def has_profit_than_x_for_n_quarters(code, year, quarter, n, x, type = 'net_prof
 
     result = True
     for p_df in p_dfs:
-        positive = positive and p_df[type] > x
+        result = result and (p_df[type] > x).all()
     return result
 
 def has_growth_than_x_for_n_quarters(code, year, quarter, n, x, type = 'nprg'):
@@ -113,9 +149,8 @@ def has_growth_than_x_for_n_quarters(code, year, quarter, n, x, type = 'nprg'):
 
     result = True
     for g_df in g_dfs:
-        result = result and g_df[type] >= x
+        result = result and (g_df[type] >= x).all()
     return result
-
 
 
 def growth_bigger_than_last_for_n_quarters(code, year, quarter, n, type = 'nprg'):
@@ -139,11 +174,67 @@ def growth_bigger_than_last_for_n_quarters(code, year, quarter, n, type = 'nprg'
     bigger = True
     new_p = None
     for g_df in g_dfs:
-        if not (new_p is None):
-            bigger = bigger and new_p > g_df[type]
+        if new_p is None:
             new_p = g_df[type]
         else:
             new_p = g_df[type]
+            bigger = bigger and (new_p > g_df[type]).all()
+    return bigger
+
+def get_profit_data_df_thru_code(code, year, quarter, n):
+    '''
+    最近n个季度的profit data 的dataframe, 以时间为index
+    code,代码
+    name,名称
+    roe,净资产收益率(%)
+    net_profit_ratio,净利率(%)
+    gross_profit_rate,毛利率(%)
+    net_profits,净利润(万元)
+    esp,每股收益
+    business_income,营业收入(百万元)
+    bips,每股主营业务收入(元)
+    '''
+    dfs = []
+    indexes = []
+    for i in range(n):
+        if i != 0:
+            year, quarter = get_last_quarter(year, quarter)
+        indexes.append(convert_year_quarter_to_datetime(year, quarter))
+        # iloc slice convert dataframe to seriazer
+        dfs.append(get_profit_data_thru_code(code, year, quarter).iloc[0])
+    df = pd.DataFrame.from_records(dfs, index=indexes)
+    df.index.name = 'date'
+    return df
+
+def get_growth_data_df_thru_code(code, year, quarter, n):
+    '''
+    最近n个季度的growth信息的dataframe, 以时间为index
+    code,代码
+    name,名称
+    mbrg,主营业务收入增长率(%)
+    nprg,净利润增长率(%)
+    nav,净资产增长率
+    targ,总资产增长率
+    epsg,每股收益增长率
+    seg,股东权益增长率
+    '''
+    dfs = []
+    indexes = []
+    for i in range(n):
+        if i != 0:
+            year, quarter = get_last_quarter(year, quarter)
+        indexes.append(convert_year_quarter_to_datetime(year, quarter))
+        dfs.append(get_growth_data_thru_code(code, year, quarter).iloc[0])
+    df = pd.DataFrame.from_records(dfs, index=indexes)
+    df.index.name = 'date'
+    return df
+
+def convert_year_quarter_to_datetime(year, quarter):
+    '''
+    提供year和quarter然后返回datetime
+    '''
+    date_str = "%s-%s"%(year, quarter * 3)
+    return datetime.datetime.strptime(date_str, '%Y-%m')
 
 def get_last_quarter(year, quarter):
     '''
@@ -168,6 +259,7 @@ def get_profit_data_thru_code(code, year, quarter):
     business_income,营业收入(百万元)
     bips,每股主营业务收入(元)
     '''
+    print("\nGet %s profit on %s year and %s quarter\n"%(code, year, quarter))
     k = "%s-%s"%(year, quarter)
     global global_profit_data
     if k in global_profit_data:
@@ -190,14 +282,41 @@ def get_growth_data_thru_code(code, year, quarter):
     epsg,每股收益增长率
     seg,股东权益增长率
     '''
+    print("\nGet %s growth info on %s year and %s quarter\n"%(code, year, quarter))
     k = "%s-%s"%(year, quarter)
     global global_profit_data
     if k in global_growth_data:
-        df = global_growth_data[key]
+        df = global_growth_data[k]
     else:
         df = ts.get_growth_data(year, quarter)
         global_growth_data[k] = df
     return df[df['code'] == code]
+
+# 从数据库中加载到dataframe
+def load_codes_from_db(table_name, index_column = 'code_index'):
+    return pd.read_sql("select * from `%s`"%(table_name), con=conn, index_col=index_column)
+
+# 把一个表里面的股票，进行basic_info_step1的验证
+def basic_info_step1_for_sepa(table_name, year, quarter):
+    df = load_codes_from_db(table_name)
+    succ_arr = []
+    fail_arr = []
+    no_basic_arr = []
+    for index, row in df.iterrows():
+        if has_basic_info_for_n_quarters(row['code'], year, quarter, 1):
+            if basic_info_step1_check(row['code'], year, quarter):
+                succ_arr.append(row['name'])
+            else:
+                fail_arr.append(row['name'])
+        else:
+            no_basic_arr.append(row['name'])
+    for name in succ_arr:
+        print("\n%s 通过了"%(name))
+    for name in fail_arr:
+        print("\n%s 失败了"%(name))
+    for name in no_basic_arr:
+        print("\n%s 暂时没有中报")
+
 
 
 # 产生具体的SEPA的股票数据
