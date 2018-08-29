@@ -45,12 +45,3 @@ def show_growth_thru_code(code, year, quarter, n, columns=['nprg', 'mbrg'],step 
     else:
         print("\n股票 %s 没有足够相关信息来展示!\n")
         return False
-
-def show_dd_max_n(n=10, type='buy'):
-    '''
-    sale/buy
-    '''
-    df = sp.get_max_dd_codes_df(type=type)
-    df = df.iloc[:n]
-    print("\n 如图：\n")
-    df.plot(kind='bar')

@@ -1,3 +1,5 @@
+# 在ipython中跑
+
 import stock_pool as sp
 import pandas as pd
 import datetime

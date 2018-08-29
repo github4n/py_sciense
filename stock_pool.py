@@ -360,29 +360,76 @@ def get_code_data_from_industry_codes(code):
         return None
     return dict(zip(result.keys(), r_list[0]))
 
-def get_max_dd_codes_df(vol=400, type='buy'):
+def get_max_dd_codes_df(vol=400, type=[-1, 0, 1], date=None):
     '''
-    sale/buy
+    1, -1, 0: 买盘、卖盘、中性盘
     返回成交量倒序的df
     '''
-    type = '买盘' if type == 'buy' else '卖盘'
     s = select([industry_codes])
     result = conn.execute(s)
     data = []
     indexes = []
     labels = ['code', 'name', 'c_name', 'vol']
-    today_str = datetime.datetime.now().strftime("%Y-%m-%d")
     for row in result:
-        df = ts.get_sina_dd('600376', date=today_str, vol=vol)
-        if df is None:
+        n = get_dd_sum_thru_code(row['code'], date=date, vol=vol, type=type)
+        if n is None:
             data.append((row['code'], row['name'], row['c_name'], 0))
         else:
-            data.append((row['code'], row['name'], row['c_name'], df[df['type'] == type]['volume'].sum()))
+            data.append((row['code'], row['name'], row['c_name'], n))
         indexes.append(row['code'])
     r_df = pd.DataFrame.from_records(data, columns=labels, index=indexes)
     r_df.index.name = 'code_index'
     r_df = r_df.sort_values(by=['vol'], ascending = False)
     return r_df
+
+# 获得一个股票大单的量
+def get_dd_sum_thru_code(code, vol=400, type=[-1, 0, 1], date=None):
+    '''
+    1, -1, 0: 买盘、卖盘、中性盘
+    返回最后的总和
+    '''
+    if date is None:
+        date = datetime.datetime.now().strftime("%Y-%m-%d")
+    type_options = {
+        1: '买盘',
+        -1: '卖盘',
+        0: '中性盘'
+    }
+    type_list = []
+
+    for i in type:
+        type_list.append(type_options[i])
+
+    df = ts.get_sina_dd(code, date=date, vol=vol)
+
+    if df is None:
+        return None
+    else:
+        return df[df['type'].isin(type_list)]['volume'].sum()
+
+def get_hist_dd_thru_code(code, vol=400, type=[-1 , 0, 1], date=None):
+    '''
+    获得code的dd数据
+    返回dataframe
+    '''
+    if date is None:
+        date = datetime.datetime.now().strftime("%Y-%m-%d")
+    type_options = {
+        1: '买盘',
+        -1: '卖盘',
+        0: '中性盘'
+    }
+    type_list = []
+
+    for i in type:
+        type_list.append(type_options[i])
+
+    df = ts.get_sina_dd(code, date=date, vol=vol)
+
+    if df is None:
+        return None
+    else:
+        return df[df['type'].isin(type_list)]
 
 
 # 从数据库中加载到dataframe
