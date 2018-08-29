@@ -348,6 +348,43 @@ def get_growth_data_thru_code(code, year, quarter):
         global_growth_data[k] = df
     return df[df['code'] == code]
 
+def get_code_data_from_industry_codes(code):
+    '''
+    返回该code的股票信息，从industry_codes表中抓取
+    '''
+    sql_str = "select * from `industry_codes` where `industry_codes`.`code` = '%s'"%(code)
+    result = conn.execute(sql_str)
+    r_list = list(result)
+    if len(r_list) == 0:
+        print("\n 没有在industry codes 中找到该code %s\n"%(code))
+        return None
+    return dict(zip(result.keys(), r_list[0]))
+
+def get_max_dd_codes_df(vol=400, type='buy'):
+    '''
+    sale/buy
+    返回成交量倒序的df
+    '''
+    type = '买盘' if type == 'buy' else '卖盘'
+    s = select([industry_codes])
+    result = conn.execute(s)
+    data = []
+    indexes = []
+    labels = ['code', 'name', 'c_name', 'vol']
+    today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    for row in result:
+        df = ts.get_sina_dd('600376', date=today_str, vol=vol)
+        if df is None:
+            data.append((row['code'], row['name'], row['c_name'], 0))
+        else:
+            data.append((row['code'], row['name'], row['c_name'], df[df['type'] == type]['volume'].sum()))
+        indexes.append(row['code'])
+    r_df = pd.DataFrame.from_records(data, columns=labels, index=indexes)
+    r_df.index.name = 'code_index'
+    r_df = r_df.sort_values(by=['vol'], ascending = False)
+    return r_df
+
+
 # 从数据库中加载到dataframe
 def load_codes_from_db(table_name, index_column = 'code_index'):
     return pd.read_sql("select * from `%s`"%(table_name), con=conn, index_col=index_column)
