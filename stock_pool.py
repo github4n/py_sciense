@@ -17,6 +17,14 @@ global_profit_data = {}
 # code: 股票的代码
 # days: 200SMA递增时间
 def sepa_step1_check(code, days):
+    '''
+    1. 200天均线是递增的，并且坚持了days天数据
+    2. 当前收盘价大于五十天局限的值
+    3. 五十天天均线值大于一百五十天的均线值
+    4. 一百五十天的均线值大于两百天的均线值
+    <5> 当前股价至少出于一年内最高股价的25%以内
+    <6> 当前股价至少比最近一年最低股价至少高30%
+    '''
     df = ts.get_hist_data(code)
     if df is None:
         return False
@@ -28,6 +36,8 @@ def sepa_step1_check(code, days):
     sma200_df = df.loc[:, ['SMA200']]
     df['df_v'] = sma200_df.diff()
     df = df.sort_index(ascending=False)
+    one_year_max = df.iloc[:261]['close'].max()
+    one_year_min = df.iloc[:261]['close'].min()
     sma200_up_ndays = True
     for index, row in (df[0:days]).iterrows():
         sma200_up_ndays = sma200_up_ndays and (row['df_v'] >= 0)
@@ -35,7 +45,11 @@ def sepa_step1_check(code, days):
     cur_sma50 = df.SMA50.values[0]
     cur_sma150 = df.SMA150.values[0]
     cur_sma200 = df.SMA200.values[0]
-    return sma200_up_ndays and (cur_value >= cur_sma50) and (cur_sma50 > cur_sma150) and (cur_sma150 > cur_sma200)
+    # <5>
+    high_result = (one_year_max - cur_value)/one_year_max < 0.25
+    # <6>
+    low_result = (cur_value - one_year_min)/one_year_min > 0.3
+    return sma200_up_ndays and (cur_value >= cur_sma50) and (cur_sma50 > cur_sma150) and (cur_sma150 > cur_sma200) and high_result and low_result
 
 def basic_info_step1_check(code, year, quarter):
     '''
@@ -47,19 +61,46 @@ def basic_info_step1_check(code, year, quarter):
     主营业务增速大于20%三个季度
     每股收益增长率大于20%三个季度
     '''
-    return has_profit_than_x_for_n_quarters(code ,year, quarter, 3, 0) and growth_bigger_than_last_for_n_quarters(code, year, quarter, 3, 'nprg') and growth_bigger_than_last_for_n_quarters(code, year, quarter, 3, 'mbrg') and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'nprg') and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'mbrg') and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'epsg')
+    return has_profit_than_x_for_n_quarters(code ,year, quarter, 3, 0) and \
+        growth_bigger_than_last_for_n_quarters(code, year, quarter, 3, 'nprg') and \
+        growth_bigger_than_last_for_n_quarters(code, year, quarter, 3, 'mbrg') and \
+        has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'nprg') and \
+        has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'mbrg') and \
+        has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'epsg')
 
-def basic_inf_step2_check(code, year, quarter):
+def basic_info_step2_check(code, year, quarter):
     '''
     基本面的算法
     盈利三个季度
-    净利润增速增加三个季度
-    主营业务增速增加三个季度
-    sma净利润增速大于20%三个季度
-    sma主营业务增速大于20%三个季度
-    sma每股收益增长率大于20%三个季度
+    sma净利润增速增加三个季度
+    sma主营业务增速增加三个季度
+    净利润增速大于20%三个季度
+    主营业务增速大于20%三个季度
+    每股收益增长率大于20%三个季度
     '''
-    return has_profit_than_x_for_n_quarters(code ,year, quarter, 3, 0) and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'nprg') and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'mbrg') and has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'epsg') and growth_bigger_than_last_for_n_quarters_thru_sma(code, year, quarter, 3, 'nprg') and growth_bigger_than_last_for_n_quarters_thru_sma(code, year, quarter, 3, 'mbrg')
+    return has_profit_than_x_for_n_quarters(code ,year, quarter, 3, 0) and \
+        has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'nprg') and \
+        has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'mbrg') and \
+        has_growth_than_x_for_n_quarters(code, year, quarter, 3, 20, 'epsg') and \
+        growth_bigger_than_last_for_n_quarters_thru_sma(code, year, quarter, 3, 'nprg') and \
+        growth_bigger_than_last_for_n_quarters_thru_sma(code, year, quarter, 3, 'mbrg')
+
+def basic_info_step_check(code, year, quarter, up_quarter_count=3, big_up_quarter_count=2, lowlevel=20):
+    '''
+    基本面算法：
+    1. 盈利, 并且保持up_quarter_count个季度
+    2. 净利润增长率大于lowlevel，并且保持up_quarter_count个季度
+    3. 主营业务收入增长率大于lowlevel，并且保持up_quarter_count个季度
+    4. 每股收益增长率增长率大于lowlevel，并且保持up_quarter_count个季度
+    5. sma净利润增速增加big_up_quarter_count个季度
+    6. sma主营业务增速增加big_up_quarter_count个季度
+    '''
+    return has_profit_than_x_for_n_quarters(code ,year, quarter, up_quarter_count, 0) and \
+        has_growth_than_x_for_n_quarters(code, year, quarter, up_quarter_count, lowlevel, 'nprg') and \
+        has_growth_than_x_for_n_quarters(code, year, quarter, up_quarter_count, lowlevel, 'mbrg') and \
+        has_growth_than_x_for_n_quarters(code, year, quarter, up_quarter_count, lowlevel, 'epsg') and \
+        growth_bigger_than_last_for_n_quarters_thru_sma(code, year, quarter, big_up_quarter_count, 'nprg') and \
+        growth_bigger_than_last_for_n_quarters_thru_sma(code, year, quarter, big_up_quarter_count, 'mbrg')
 
 def growth_bigger_than_last_for_n_quarters_thru_sma(code, year, quarter, n, column='nprg', step=2):
     '''
@@ -100,6 +141,21 @@ def has_basic_info_for_n_quarters(code, year, quarter, n):
         exist = exist and len(p_df) > 0
     return exist
 
+def has_growth_info_for_n_quarters(code, year, quarter, n):
+    '''
+    是否有季度财报 for n 个季度
+    '''
+    g_dfs = []
+    for i in range(n):
+        if i == 0:
+            g_dfs.append(get_growth_data_thru_code(code, year, quarter))
+        else:
+            year, quarter = get_last_quarter(year, quarter)
+            g_dfs.append(get_growth_data_thru_code(code, year, quarter))
+    exist = True
+    for p_df in g_dfs:
+        exist = exist and len(p_df) > 0
+    return exist
 
 def has_profit_than_x_for_n_quarters(code, year, quarter, n, x, type = 'net_profits'):
     '''
@@ -284,7 +340,7 @@ def get_growth_data_thru_code(code, year, quarter):
     '''
     print("\nGet %s growth info on %s year and %s quarter\n"%(code, year, quarter))
     k = "%s-%s"%(year, quarter)
-    global global_profit_data
+    global global_growth_data
     if k in global_growth_data:
         df = global_growth_data[k]
     else:
@@ -303,7 +359,7 @@ def basic_info_step1_for_sepa(table_name, year, quarter):
     fail_arr = []
     no_basic_arr = []
     for index, row in df.iterrows():
-        if has_basic_info_for_n_quarters(row['code'], year, quarter, 1):
+        if has_basic_info_for_n_quarters(row['code'], year, quarter, 3)  and has_growth_info_for_n_quarters(row['code'], year, quarter, 3):
             if basic_info_step1_check(row['code'], year, quarter):
                 succ_arr.append(row['name'])
             else:
@@ -315,8 +371,51 @@ def basic_info_step1_for_sepa(table_name, year, quarter):
     for name in fail_arr:
         print("\n%s 失败了"%(name))
     for name in no_basic_arr:
-        print("\n%s 暂时没有中报")
+        print("\n%s 暂时没有中报"%(name))
 
+
+# 把一个表里的数据，进行basic_info_step2的验证
+def basic_info_step2_for_sepa(table_name, year, quarter):
+    df = load_codes_from_db(table_name)
+    succ_arr = []
+    fail_arr = []
+    no_basic_arr = []
+    for index, row in df.iterrows():
+        print("\n处理 %s\n"%(row['name']))
+        if has_basic_info_for_n_quarters(row['code'], year, quarter, 5) and has_growth_info_for_n_quarters(row['code'], year, quarter, 5):
+            if basic_info_step2_check(row['code'], year, quarter):
+                succ_arr.append(row['name'])
+            else:
+                fail_arr.append(row['name'])
+        else:
+            no_basic_arr.append(row['name'])
+    for name in succ_arr:
+        print("\n%s 通过了"%(name))
+    for name in fail_arr:
+        print("\n%s 失败了"%(name))
+    for name in no_basic_arr:
+        print("\n%s 暂时没有中报"%(name))
+
+def basic_info_step_for_sepa(table_name, year, quarter, up_quarter_count=3, big_up_quarter_count=2, lowlevel=20):
+    df = load_codes_from_db(table_name)
+    succ_arr = []
+    fail_arr = []
+    no_basic_arr = []
+    for index, row in df.iterrows():
+        print("\n处理 %s\n"%(row['name']))
+        if has_basic_info_for_n_quarters(row['code'], year, quarter, 5) and has_growth_info_for_n_quarters(row['code'], year, quarter, 5):
+            if basic_info_step_check(row['code'], year, quarter, up_quarter_count, big_up_quarter_count, lowlevel):
+                succ_arr.append(row['name'])
+            else:
+                fail_arr.append(row['name'])
+        else:
+            no_basic_arr.append(row['name'])
+    for name in succ_arr:
+        print("\n%s 通过了"%(name))
+    for name in fail_arr:
+        print("\n%s 失败了"%(name))
+    for name in no_basic_arr:
+        print("\n%s 暂时没有中报"%(name))
 
 
 # 产生具体的SEPA的股票数据
