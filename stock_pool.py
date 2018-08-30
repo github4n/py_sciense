@@ -137,6 +137,20 @@ def add_sma(df, column, step=2):
     df["SMA_%s_%s"%(column, step)] = ta.SMA(df[column].values, timeperiod=step)
     return df
 
+def add_rsi(df, column='clse', rsi_period=14):
+    '''
+    Relative Strength Index (RSI) is a momentum oscillator that measures the speed and change of price movements.
+    RSI is considered overbought when above 70 and oversold when below 30
+                 100
+    RSI = 100 - --------
+                 1 + RS
+
+    RS = Average Gain / Average Loss
+    First Average Gain = Sum of Gains over the past 14 periods / 14.
+    First Average Loss = Sum of Losses over the past 14 periods / 14
+    '''
+    return df
+
 def add_macd(df, column='close', fastperiod=MACD_FAST, slowperiod=MACD_SLOW, signalperiod=MACD_SIGNAL):
     '''
     The MACD Line is the difference between fast EMA and slow EMA. (dif)
