@@ -150,6 +150,17 @@ def add_rsi(df, column='clse', rsi_period=14):
     First Average Loss = Sum of Losses over the past 14 periods / 14
     '''
     return df
+def add_stoch(df):
+    '''
+    Stochastic Oscillator is a momentum indicator comparing the closing price of a security to the range of its prices over a certain period of time.
+    K = 100(C - L14)/(H14 - L14)
+    C = the most recent closing price
+    L14 = the low of the 14 previous trading sessions
+    H14 = the highest price traded during the same 14-day period
+    K = the current market rate for the currency pair
+    D = 3-period moving average of K
+    https://www.investopedia.com/terms/s/stochasticoscillator.asp
+    '''
 
 def add_macd(df, column='close', fastperiod=MACD_FAST, slowperiod=MACD_SLOW, signalperiod=MACD_SIGNAL):
     '''
