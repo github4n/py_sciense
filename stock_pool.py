@@ -137,7 +137,7 @@ def add_sma(df, column, step=2):
     df["SMA_%s_%s"%(column, step)] = ta.SMA(df[column].values, timeperiod=step)
     return df
 
-def add_rsi(df, column='clse', rsi_period=14):
+def add_rsi(df, column='close', rsi_period=RSI_PERIOD):
     '''
     Relative Strength Index (RSI) is a momentum oscillator that measures the speed and change of price movements.
     RSI is considered overbought when above 70 and oversold when below 30
@@ -148,9 +148,20 @@ def add_rsi(df, column='clse', rsi_period=14):
     RS = Average Gain / Average Loss
     First Average Gain = Sum of Gains over the past 14 periods / 14.
     First Average Loss = Sum of Losses over the past 14 periods / 14
+
+    --------------------
+
+    rsi_test 为 rsi 小于50卖方力量比价足, 并且开始转向向上
     '''
+    # 确定Ascending排序
+    df = df.sort_index(ascending=True)
+    df['rsi'] = ta.RSI(df[column].values, rsi_period)
+    df['sma_r'] = pd.Series.rolling(df.rsi, RSI_AVG_PERIOD).mean()
+    # rsi 小于50卖方力量比价足, 并且开始转向向上
+    df['rsi_test'] = np.where((df.rsi < 50) & (df.rsi > df.rsi.shift(1)), 1, 0)
     return df
-def add_stoch(df):
+
+def add_stoch(df, stoch_k=STOCH_K, stoch_d=STOCH_D):
     '''
     Stochastic Oscillator is a momentum indicator comparing the closing price of a security to the range of its prices over a certain period of time.
     K = 100(C - L14)/(H14 - L14)
@@ -160,7 +171,15 @@ def add_stoch(df):
     K = the current market rate for the currency pair
     D = 3-period moving average of K
     https://www.investopedia.com/terms/s/stochasticoscillator.asp
+
+    --------------------
+
+    stoch_k_test 是 stoch 小于50卖方力量比价足，并且开始转向向上
     '''
+    df = df.sort_index(ascending=True)
+    df['stoch_k'], df['stoch_d'] = ta.STOCH(df.high.values, df.low.values, df.close.values, slowk_period=stoch_k, slowd_period=stoch_d)
+    df['stoch_k_test'] = np.where((df.stoch_k < 50) & (df.stoch_k > df.stoch_k.shift(1)), 1, 0)
+    return df
 
 def add_macd(df, column='close', fastperiod=MACD_FAST, slowperiod=MACD_SLOW, signalperiod=MACD_SIGNAL):
     '''
@@ -168,7 +187,10 @@ def add_macd(df, column='close', fastperiod=MACD_FAST, slowperiod=MACD_SLOW, sig
     Signal line is 9 period EMA of the MACD Line. (dea)
     MACD Histogram is the difference between MACD Line and Signal line. (macd)
 
+    --------------------
+    macd_test 是 dif大于dea
     '''
+    df = df.sort_index(ascending=True)
     df['macd'], df['macdSignal'], df['macdHist'] = ta.MACD(df[column].values, fastperiod=MACD_FAST, slowperiod=MACD_SLOW, signalperiod=MACD_SIGNAL)
     df['macd_test'] = np.where((df.macd > df.macdSignal), 1, 0)
     return df
