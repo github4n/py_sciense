@@ -200,3 +200,11 @@ ax4.axhline(y=50, c='black')
 ax4.axhline(y=80, c='b')
 
 plt.show()
+
+
+# 二十天线，是上升的
+df = sp.load_codes_from_db('2018-08-30_60_sepa_step1_codes')
+data = []
+for index, row in df.iterrows():
+    if sp.sma_uptrend(row['code']):
+        data.append(row)

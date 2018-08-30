@@ -25,6 +25,28 @@ Y_AXIS_SIZE = 12
 global_growth_data = {}
 global_profit_data = {}
 
+def high_than_sma(code, step=20):
+    '''
+    判断是否大于step均线
+    '''
+    df = ts.get_hist_data(code)
+    df = df.sort_index(ascending=True)
+    df = add_sma(df, 'close', step)
+    df = df.tail(1)
+    key = "SMA_%s_%s"%('close', step)
+    return (df['close'] > df[key]).all()
+
+def sma_uptrend(code, step=20):
+    '''
+    判断step的sma是否是上升趋势
+    '''
+    df = ts.get_hist_data(code)
+    df = df.sort_index(ascending=True)
+    df = add_sma(df, 'close', step)
+    df = df.tail(2)
+    key = "SMA_%s_%s"%('close', step)
+    return df[key].diff()[1:].sum() > 0
+
 # SEPA 系统选股算法
 # code: 股票的代码
 # days: 200SMA递增时间

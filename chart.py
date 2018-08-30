@@ -91,6 +91,7 @@ def show_tech_thru_code(code, days=100):
     展示蜡烛图
     展示RSI
     展示MACD
+    https://wiki.fintechki.com/index.php?title=How_to_draw_MACD_Charts
     '''
     ticker = code
     df = ts.get_hist_data(code)
