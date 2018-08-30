@@ -9,6 +9,18 @@ from models import conn, industry_codes, engine
 import datetime
 
 
+SMA_FAST = 50
+SMA_SLOW = 200
+RSI_PERIOD = 14
+RSI_AVG_PERIOD = 15
+MACD_FAST = 12
+MACD_SLOW = 26
+MACD_SIGNAL = 9
+STOCH_K = 14
+STOCH_D = 3
+SIGNAL_TOL = 3
+Y_AXIS_SIZE = 12
+
 # global variable to cache for performance
 global_growth_data = {}
 global_profit_data = {}
@@ -123,6 +135,17 @@ def add_sma(df, column, step=2):
     '''
     df = df.sort_index(ascending=True)
     df["SMA_%s_%s"%(column, step)] = ta.SMA(df[column].values, timeperiod=step)
+    return df
+
+def add_macd(df, column='close', fastperiod=MACD_FAST, slowperiod=MACD_SLOW, signalperiod=MACD_SIGNAL):
+    '''
+    The MACD Line is the difference between fast EMA and slow EMA. (dif)
+    Signal line is 9 period EMA of the MACD Line. (dea)
+    MACD Histogram is the difference between MACD Line and Signal line. (macd)
+
+    '''
+    df['macd'], df['macdSignal'], df['macdHist'] = ta.MACD(df[column].values, fastperiod=MACD_FAST, slowperiod=MACD_SLOW, signalperiod=MACD_SIGNAL)
+    df['macd_test'] = np.where((df.macd > df.macdSignal), 1, 0)
     return df
 
 def has_basic_info_for_n_quarters(code, year, quarter, n):
@@ -500,7 +523,7 @@ def basic_info_step_for_sepa(table_name, year, quarter, up_quarter_count=3, big_
         print("\n%s 失败了"%(name))
     for name in no_basic_arr:
         print("\n%s 暂时没有中报"%(name))
-
+    return None
 
 # 产生具体的SEPA的股票数据
 # 存在 {date}_days_sepa_step1_codes 数据库表中
