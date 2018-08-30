@@ -455,6 +455,15 @@ def get_dd_sum_thru_code(code, vol=400, type=[-1, 0, 1], date=None):
     else:
         return df[df['type'].isin(type_list)]['volume'].sum()
 
+def get_dd_df_thru_code(code, vol=400, date=None):
+    '''
+    获得某个股票的大单df
+    '''
+    if date is None:
+        date = datetime.datetime.now().strftime("%Y-%m-%d")
+    df = ts.get_sina_dd(code, date=date, vol=vol)
+    return df
+
 def get_hist_dd_thru_code(code, vol=400, type=[-1 , 0, 1], date=None):
     '''
     获得code的dd数据

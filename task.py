@@ -5,6 +5,9 @@ import pandas as pd
 import datetime
 import talib as ta
 import numpy as np
+import tushare as ts
+
+# '000681' 视觉中国
 
 sp.produce_sepa_codes(3)
 
@@ -13,3 +16,5 @@ sp.basic_info_step1_for_sepa('2018-08-27_60_sepa_step1_codes', 2018, 2)
 sp.basic_info_step2_for_sepa('2018-08-27_60_sepa_step1_codes', 2018, 2)
 
 sp.basic_info_step_for_sepa('2018-08-28_80_sepa_step1_codes', 2018, 2)
+
+df = sp.get_dd_df_thru_code(code)
