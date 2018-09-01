@@ -23,7 +23,7 @@ STOCH_D = 3
 SIGNAL_TOL = 3
 Y_AXIS_SIZE = 12
 
-def show_growth_thru_code(code, year, quarter, n, columns=['nprg', 'mbrg'],step = 2):
+def show_growth_thru_code(code, year, quarter, n, columns=['nprg', 'mbrg'], step = 2):
     '''
     展示公司增长能力的图标
     code,代码
