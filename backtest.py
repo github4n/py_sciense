@@ -9,6 +9,7 @@ import talib as ta
 from sqlalchemy.sql import select
 import basic_method
 import data_pool
+from models import Session
 
 # 回测的实现
 # 2017-04-28 开始有150天线
@@ -68,6 +69,11 @@ class DayBacktest:
         '''
         return data_pool.get_growth_data_df(code, date)
 
+    def current_stocks(self):
+        '''
+        返回现在存在的股票models
+        '''
+        return self.profile.get_current_stocks()
 
 class SepaDayBacktest(DayBacktest):
     def handle_bar(self, date):
@@ -80,7 +86,6 @@ class SepaDayBacktest(DayBacktest):
         self.buy_stocks(date)
 
         self.stocks_pool = self.get_stocks_pool_thru_trend(date)
-
         # 第二天需要卖掉的股票
         self.sell_stocks_pool = self.get_sell_stocks_pool_thru_short_trend(date)
         # 第二天需要买的股票
@@ -115,14 +120,6 @@ class SepaDayBacktest(DayBacktest):
         df = pd.DataFrame.from_records(data, columns=labels, index=indexes)
         return df
 
-    def score_stocks_thru_short_trend(self, date):
-        '''
-        根据短期的趋势来给股票打分
-        '''
-        df = self.stocks_pool.copy()
-        # 打分的操作
-        return df
-
     def get_sell_stocks_pool_thru_short_trend(self, date):
         '''
         获得明天需要卖掉的股票
@@ -132,7 +129,8 @@ class SepaDayBacktest(DayBacktest):
         '''
         获得明天需要买的股票
         '''
-        df = self.score_stocks_thru_short_trend(date)
+        df = self.stocks_pool.copy()
+        # 对df来打分
         df = df.sort_values(by=['score'], ascending=False)
         df = df.loc[df['code'] >= 8]
         return df
