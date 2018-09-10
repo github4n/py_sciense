@@ -25,6 +25,7 @@ def get_hist_data_df(code, date):
         df = global_hist_data[code].copy()
     else:
         df = ts.get_hist_data(code)
+        df.index = pd.to_datetime(df.index)
         global_profit_data[code] = df.copy()
     df = df.sort_index(ascending=True)
     df = df.loc[df.index <= date]
@@ -164,6 +165,6 @@ def get_growth_data_thru_code(code, year, quarter):
         df = ts.get_growth_data(year, quarter)
         global_growth_data[k] = df
     if df is None:
-        return None:
+        return None
     else:
         return df[df['code'] == code]
