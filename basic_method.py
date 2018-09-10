@@ -168,29 +168,68 @@ def add_macd(df, column='close', fastperiod=MACD_FAST, slowperiod=MACD_SLOW, sig
     df['macd_test'] = np.where((df.macd > df.macdSignal), 1, 0)
     return df
 
+def add_bias(df, column='close', step=5):
+    '''
+    添加Bias指标
+    '''
+    df = df.sort_index(ascending=True)
+    df = add_sma(df, column, step=step)
+    m_k = "SMA_%s_%s"%(column, step)
+    b_k = "BIAS_%s"%(step)
+    df[b_k] = ((df[column] - df[m_k]) / df[m_k]) * 100
+    return df
+
 def vcp_test(df, volumn_column='volume', close_column='close', days=10):
     '''
     VCP的检测
     '''
+    return sma_lower(df, column=volumn_column, days=days) and \
+        bias_lower(df, column=close_column, days=days)
+
+def sma_lower(df, column='volume', step=10, days=10):
+    '''
+    column的sma的值递减
+    '''
     volumn_df = df.copy()
+
+    volumn_df = add_sma(volumn_df, column, step=step)
+    k = "SMA_%s_%s"%(column, step)
+
+    volumn_df = add_sma(volumn_df, k, step=step)
+    k1 = "SMA_%s_%s"%(k, step)
+
+    volumn_df = volumn_df.sort_index(ascending=True)
+    volumn_lower_k = 'volumn_lower_test'
+    volumn_df[volumn_lower_k] = np.where(volumn_df[k1] <= volumn_df[k1].shift(1), 1, 0)
+    volumn_df = volumn_df.tail(days)
+    return (volumn_df[volumn_lower_k] == 1).all()
+
+def bias_lower(df, column='close', days=10, short_step=5, long_step=20, abs_step=10):
+    '''
+    价格波动越来越小
+    long_step的bias和short_step的bias的差值的平均移动值越来越小
+    '''
     close_df = df.copy()
 
-    # 成交量sma变小
-    add_sma(volumn_df, volumn_column, step=5)
-    k = "SMA_%s_%s"%(volumn_column, 5)
-    volumn_df = volumn_df.sort_index(ascending=True)
-    volumn_df['volumn_lower_test'] = np.where(volumn_df[k] <= volumn_df[k].shift(1), 1, 0)
-    volumn_df = volumn_df.tail(days)
+    # 添加long_step的bias
+    # 添加short_step的bias
+    b20_k = "BIAS_%s"%(long_step)
+    b5_k = "BIAS_%s"%(short_step)
+    close_df = add_bias(close_df, column=column, step=short_step)
+    close_df = add_bias(close_df, column=column, step=long_step)
 
-    # bias的绝对值的sma变小
-    k2 = "SMA_%s_%s"%(close_column, 20)
-    add_sma(close_df, close_column, step=20)
-    close_df['ABS_BIAS'] = (close_df['close'] - close_df[k2]).abs()
-    add_sma(close_df, 'ABS_BIAS', 20)
-    k3 = "SMA_%s_%s"%('ABS_BIAS', 20)
+    # long_step的bias和short_step的bias的差值的绝对值
+    abs_bias_k = 'ABS_SUB_BIAS'
+    close_df[abs_bias_k] = (close_df[b5_k] - close_df[b20_k]).abs()
+
+    # long_step的bias和short_step的bias的差值的绝对值的abs_step的平均移动值
+    close_df = add_sma(close_df, column=abs_bias_k, step=abs_step)
+    abs_bias_sma_k = "SMA_%s_%s"%(abs_bias_k, abs_step)
+    close_df = add_sma(close_df, column=abs_bias_sma_k, step=abs_step)
+    abs_bias_sma_k1 = "SMA_%s_%s"%(abs_bias_sma_k, abs_step)
+
     close_df = close_df.sort_index(ascending=True)
-    close_df['bias_lower_test'] = np.where(close_df[k3] <= close_df[k3].shift(1), 1, 0)
-    close_df = df.tail(days)
-
-    return (volumn_df['volumn_lower_test'] == 1).all() and \
-        (close_df['bias_lower_test'] == 1).all()
+    bias_lower_k = 'bias_lower_test'
+    close_df[bias_lower_k] = np.where(close_df[abs_bias_sma_k1] <= close_df[abs_bias_sma_k1].shift(1), 1, 0)
+    close_df = close_df.tail(days)
+    return (close_df[bias_lower_k] == 1).all()
