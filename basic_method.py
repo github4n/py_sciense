@@ -107,6 +107,27 @@ def add_sma(df, column, step=2):
     df["SMA_%s_%s"%(column, step)] = ta.SMA(df[column].values, timeperiod=step)
     return df
 
+def sma_key(column, step):
+    '''
+    返回sma的column
+    '''
+    return "SMA_%s_%s"%(column, step)
+
+def add_ema(df, column, step=2):
+    '''
+    添加column的step大小的ema
+    添加的column名字为 ``EMA_%s_%s%(column, step)``
+    '''
+    df = df.sort_index(ascending=True)
+    df["SMA_%s_%s"%(column, step)] = ta.EMA(df[column], timeperiod=step)
+    return df
+
+def ema_key(column, step):
+    '''
+    返回ema的column
+    '''
+    return "EMA_%s_%s"%(column, step)
+
 # RSI 指标算法
 def add_rsi(df, column='close', rsi_period=RSI_PERIOD):
     '''
@@ -190,19 +211,19 @@ def sma_lower(df, column='volume', step=10, days=10):
     '''
     column的sma的值递减
     '''
-    volumn_df = df.copy()
+    volume_df = df.copy()
 
-    volumn_df = add_sma(volumn_df, column, step=step)
+    volume_df = add_sma(volume_df, column, step=step)
     k = "SMA_%s_%s"%(column, step)
 
-    volumn_df = add_sma(volumn_df, k, step=step)
+    volume_df = add_sma(volume_df, k, step=step)
     k1 = "SMA_%s_%s"%(k, step)
 
-    volumn_df = volumn_df.sort_index(ascending=True)
+    volume_df = volume_df.sort_index(ascending=True)
     volumn_lower_k = 'volumn_lower_test'
-    volumn_df[volumn_lower_k] = np.where(volumn_df[k1] <= volumn_df[k1].shift(1), 1, 0)
-    volumn_df = volumn_df.tail(days)
-    return (volumn_df[volumn_lower_k] == 1).all()
+    volume_df[volumn_lower_k] = np.where(volume_df[k1] <= volume_df[k1].shift(1), 1, 0)
+    volume_df = volume_df.tail(days)
+    return (volume_df[volumn_lower_k] == 1).all()
 
 def bias_lower(df, column='close', days=10, short_step=5, long_step=20, abs_step=10):
     '''
