@@ -10,6 +10,7 @@ from sqlalchemy.sql import select
 import basic_method
 import data_pool
 from models import Session
+import basic_method as bm
 
 # 回测的实现
 # 2017-04-28 开始有150天线
@@ -38,7 +39,8 @@ class DayBacktest:
         df = ts.get_hist_data('000661')
         df.index = pd.to_datetime(df.index)
         df = df.sort_index(ascending=True)
-        df = df.loc[df.index >= self.start_date].loc[df.index <= self.end_date]
+        df = df.loc[df.index >= self.start_date]
+        df = df.loc[df.index <= self.end_date]
         return df.index
 
     def run(self):
@@ -75,7 +77,21 @@ class DayBacktest:
         '''
         return self.profile.get_current_stocks()
 
+class TestDayBacktest(DayBacktest):
+
+    def handle_bar(self, date):
+        code = '002228'
+        df = self.get_hist_data_df(code, date)
+        if bm.vcp_test_double_sma(df, days=10) or \
+           bm.vcp_test_double_sma(df, days=20) or \
+           bm.vcp_test_double_sma(df, days=30) or \
+           bm.vcp_test_double_ema(df, days=10) or \
+           bm.vcp_test_double_ema(df, days=20) or \
+           bm.vcp_test_double_ema(df, days=30):
+            print(date)
+
 class SepaDayBacktest(DayBacktest):
+
     def handle_bar(self, date):
         '''
         每个时间窗口的处理函数
