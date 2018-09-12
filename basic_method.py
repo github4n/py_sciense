@@ -206,7 +206,7 @@ def vcp_test_double_sma(df, volume_column='volume', close_column='close', days=1
     '''
     return sma_lower_double_sma(df, column=volume_column, days=days) and \
         bias_lower_double_sma(df, column=close_column, days=days) and \
-        bias_positive_and_negative_percentage(df, column=close_column, days=days)
+        bias_positive_and_negative_percentage(df, column=close_column, days=days, low_percentage=0.5, high_percentage=1.0)
 
 def vcp_test_double_ema(df, volume_column='volume', close_column='close', days=10):
     '''
@@ -214,7 +214,7 @@ def vcp_test_double_ema(df, volume_column='volume', close_column='close', days=1
     '''
     return ema_lower_double_ema(df, column=volume_column, days=days) and \
         bias_lower_double_ema(df, column=close_column, days=days) and \
-        bias_positive_and_negative_percentage(df, column=close_column, days=days)
+        bias_positive_and_negative_percentage(df, column=close_column, days=days, low_percentage=0.5, high_percentage=1.0)
 
 def sma_lower_double_sma(df, column='volume', step=10, days=10, percentage=0.9):
     '''
@@ -252,7 +252,7 @@ def ema_lower_double_ema(df, column='volume', step=10, days=10, percentage=0.9):
     volume_df = volume_df.tail(days)
     return (len(volume_df.loc[volume_df[volume_lower_k] == 1]) / len(volume_df)) >= percentage
 
-def bias_lower_double_sma(df, column='close', days=10, short_step=5, long_step=20, abs_step=10, percentage=0.9):
+def bias_lower_double_sma(df, column='close', days=10, short_step=5, long_step=20, abs_step=10, percentage=0.8):
     '''
     价格波动越来越小
     long_step的bias和short_step的bias的差值的平均移动值越来越小
@@ -271,7 +271,7 @@ def bias_lower_double_sma(df, column='close', days=10, short_step=5, long_step=2
 
     return sma_lower_double_sma(close_df, column=abs_bias_k, step=abs_step, days=days, percentage=percentage)
 
-def bias_lower_double_ema(df, column='close', days=10, short_step=5, long_step=20, ema_step=10, percentage=0.9):
+def bias_lower_double_ema(df, column='close', days=10, short_step=5, long_step=20, ema_step=10, percentage=0.8):
     '''
     价格波动越来越小
     long_step的bias和short_step的bias的差值的平均移动值越来越小
@@ -289,13 +289,33 @@ def bias_lower_double_ema(df, column='close', days=10, short_step=5, long_step=2
     close_df[abs_bias_k] = (close_df[b5_k] - close_df[b20_k]).abs()
     return ema_lower_double_ema(close_df, column=abs_bias_k, step=ema_step, days=days, percentage=percentage)
 
-def bias_positive_and_negative_percentage(df, column='close', days=30, step=5, lower_percentage=0.4, high_percentage=0.6):
+def bias_positive_and_negative_percentage(df, column='close', days=30, step=5, low_percentage=0.5, high_percentage=1):
     '''
     价格波动正负比例
     '''
     close_df = df.copy()
     b5_k = "BIAS_%s"%(step)
     close_df = add_bias(close_df, column=column, step=step)
-    percentage = len(close_df.loc[close_df[b5_k] < 0]) / len(close_df)
-    return percentage >= lower_percentage and \
+    close_df = close_df.sort_index(ascending=True)
+    close_df = close_df.tail(days)
+    percentage = len(close_df.loc[close_df[b5_k] > 0]) / len(close_df)
+    return percentage >= low_percentage and \
         percentage <= high_percentage
+
+def price_positive_and_negative_percentage(df, open_column='close', close_column='close', days=30, step=5, low_percentage=0.5, high_percentage=1):
+    '''
+    绿红比例
+    '''
+    new_df = df.copy()
+    k = 'close_sub_open'
+    new_df[k] = new_df[close_column] - new_df[open_column]
+    percentage = len(new_df.loc[new_df[k] > 0]) / len(new_df)
+    return percentage >= low_percentage and \
+        percentage <= high_percentage
+
+def price_high_percentage(df, column='close', percentage=0.04):
+    '''
+    今天比昨天增长多少
+    '''
+    new_df = df.sort_index(ascending=True)
+    new_df = new_df.tail(2)

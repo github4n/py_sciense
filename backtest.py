@@ -80,7 +80,7 @@ class DayBacktest:
 class TestDayBacktest(DayBacktest):
 
     def handle_bar(self, date):
-        code = '002228'
+        code = '000681'
         df = self.get_hist_data_df(code, date)
         if bm.vcp_test_double_sma(df, days=10) or \
            bm.vcp_test_double_sma(df, days=20) or \
