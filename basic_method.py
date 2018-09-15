@@ -200,23 +200,86 @@ def add_bias(df, column='close', step=5):
     df[b_k] = ((df[column] - df[m_k]) / df[m_k]) * 100
     return df
 
-def vcp_test_double_sma(df, volume_column='volume', close_column='close', days=10):
+def revert_point_1(df):
+    '''
+    完整的vcp + 放阳
+    1. close 的值增长了0.04以上
+    2. volume 的值增长了0.03以上
+    3. 20天平均线向上
+    4. 进五天有VCP的趋势
+    <5>. 成交量五天最高
+    '''
+    result = True
+    result = result and \
+        open_sub_close_percentage(df, close_column='close', open_column='open', percentage=0.03) and \
+        high_percentage(df, column='volume', percentage=0.3) and \
+        sma_uptrend(df) and \
+        highest_in_days(df)
+
+    if not result:
+        return result
+
+    df_list = []
+    for i in range(5):
+        df_list.append(df.iloc[:(-1-i)])
+    vcp_result = False
+    for before_df in df_list:
+        vcp_result = vcp_result or vcp(before_df)
+
+    return result and \
+        vcp_result
+
+def highest_in_days(df, column='volume', days=5):
+    '''
+    days天内最高
+    '''
+    v_df = df.copy()
+    v_df = v_df.sort_index(ascending=True)
+    today_v = v_df.tail(1)[column].sum()
+    v_df = v_df.iloc[-5:-1]
+    k = 'highest_key'
+    v_df[k] = v_df[column] < today_v
+    return  v_df[k].all()
+
+
+def vcp(df):
+    '''
+    VCP 测试
+    '''
+    return vcp_test_double_sma(df, days=10) or \
+        vcp_test_double_sma(df, days=20) or \
+        vcp_test_double_sma(df, days=30) or \
+        vcp_test_double_ema(df, days=10) or \
+        vcp_test_double_ema(df, days=20) or \
+        vcp_test_double_ema(df, days=30)
+
+
+def vcp_test_double_sma(df, volume_column='volume', close_column='close', days=10, v_days=5):
     '''
     VCP的检测
     '''
-    return sma_lower_double_sma(df, column=volume_column, days=days) and \
-        bias_lower_double_sma(df, column=close_column, days=days) and \
-        bias_positive_and_negative_percentage(df, column=close_column, days=days, low_percentage=0.5, high_percentage=1.0)
+    return lower(df, column=volume_column, days=v_days) and \
+        bias_lower_double_sma(df, column=close_column, days=days)
 
-def vcp_test_double_ema(df, volume_column='volume', close_column='close', days=10):
+def vcp_test_double_ema(df, volume_column='volume', close_column='close', days=10, v_days=5):
     '''
     VCP的检测
     '''
-    return ema_lower_double_ema(df, column=volume_column, days=days) and \
-        bias_lower_double_ema(df, column=close_column, days=days) and \
-        bias_positive_and_negative_percentage(df, column=close_column, days=days, low_percentage=0.5, high_percentage=1.0)
+    return lower(df, column=volume_column, days=v_days) and \
+        bias_lower_double_ema(df, column=close_column, days=days)
 
-def sma_lower_double_sma(df, column='volume', step=10, days=10, percentage=0.9):
+def lower(df, column='volume', days=10, percentage=0.7):
+    '''
+    column的递减
+    '''
+    volume_df = df.copy()
+    volume_df = volume_df.sort_index(ascending=True)
+    volume_lower_k = 'volumn_lower_test'
+    volume_df[volume_lower_k] = np.where(volume_df[column] <= volume_df[column].shift(1), 1, 0)
+    volume_df = volume_df.tail(days )
+    return (len(volume_df.loc[volume_df[volume_lower_k] == 1]) / len(volume_df)) >= percentage
+
+def sma_lower_double_sma(df, column='volume', step=10, days=10, percentage=0.8):
     '''
     column的sma的值递减
     '''
@@ -234,7 +297,7 @@ def sma_lower_double_sma(df, column='volume', step=10, days=10, percentage=0.9):
     volume_df = volume_df.tail(days)
     return (len(volume_df.loc[volume_df[volume_lower_k] == 1]) / len(volume_df)) >= percentage
 
-def ema_lower_double_ema(df, column='volume', step=10, days=10, percentage=0.9):
+def ema_lower_double_ema(df, column='volume', step=10, days=10, percentage=0.8):
     '''
     column的ema的值递减法
     '''
@@ -313,9 +376,31 @@ def price_positive_and_negative_percentage(df, open_column='close', close_column
     return percentage >= low_percentage and \
         percentage <= high_percentage
 
-def price_high_percentage(df, column='close', percentage=0.04):
+def high_percentage(df, column='close', percentage=0.03):
     '''
     今天比昨天增长多少
     '''
     new_df = df.sort_index(ascending=True)
+    today_row = new_df.iloc[-1]
+    yesterday_row = new_df.iloc[-2]
+    return ((today_row[column] - yesterday_row[column]) / yesterday_row[column]) > percentage
+
+def open_sub_close_percentage(df, open_column='open', close_column='close', percentage=0.03):
+    '''
+    收盘价 - 开盘价 的比例
+    '''
+    new_df = df.sort_index(ascending=True)
+    today_row = new_df.iloc[-1]
+    return ((today_row[close_column] - today_row[open_column]) / today_row[open_column]) > percentage
+
+
+def sma_uptrend(df, step=20):
+    '''
+    判断step的sma是否是上升趋势
+    '''
+    new_df = df.copy()
+    new_df = new_df.sort_index(ascending=True)
+    new_df = add_sma(new_df, 'close', step)
     new_df = new_df.tail(2)
+    key = "SMA_%s_%s"%('close', step)
+    return new_df[key].diff()[1:].sum() >= 0
