@@ -8,13 +8,21 @@ import numpy as np
 from models import conn, industry_codes, engine
 import datetime
 from sqlalchemy.sql import select
-from models import Session, FRecord, FStock, FProfile, industry_codes
+from models import Session, FRecord, FStock, FProfile, industry_codes, table_exists, df_to_db
 
 # global variable to cache for performance
 global_growth_data = {}
 global_profit_data = {}
 global_hist_data = {}
 all_codes_df = []
+# 抓取h_data的开始时间
+start_d = '2014-01-01'
+
+def read_df_from_db(table_name, index_col='date'):
+    '''
+    从数据库中读取数据组成dataframe
+    '''
+    return pd.read_sql_table(table_name, engine,index_col=index_col)
 
 def get_hist_data_df(code, date):
     '''
@@ -24,12 +32,54 @@ def get_hist_data_df(code, date):
     if code in global_hist_data:
         df = global_hist_data[code].copy()
     else:
-        df = ts.get_hist_data(code)
+        df = get_hist_data(code)
+        if df is None:
+            return df
         df.index = pd.to_datetime(df.index)
-        global_profit_data[code] = df.copy()
+        global_hist_data[code] = df.copy()
     df = df.sort_index(ascending=True)
     df = df.loc[df.index <= date]
     return df
+
+def get_price(code, date):
+    '''
+    获得该天股票的close price
+    '''
+    df = get_hist_data_df(code, date)
+    df = df.sort_index(ascending=True)
+    return df.tail(1)['close'].sum()
+
+def get_open_price(code, date):
+    '''
+    获得该天股票的open price
+    '''
+    df = get_hist_data_df(code, date)
+    df = df.sort_index(ascending=True)
+    return df.tail(1)['open'].sum()
+
+def get_h_data(code):
+    '''
+    获取数据，并且存在数据库中
+    '''
+    table_name = "%s_hlong"%(code)
+    if table_exists(table_name):
+        return read_df_from_db(table_name, index_col='date')
+    else:
+        df = ts.get_h_data(code, start=start_d)
+        df_to_db(table_name, df)
+        return df
+
+def get_hist_data(code):
+    '''
+    获取数据，并且存在数据库中
+    '''
+    table_name = "%s_hist"%(code)
+    if table_exists(table_name):
+        return read_df_from_db(table_name, index_col='date')
+    else:
+        df = ts.get_hist_data(code)
+        df_to_db(table_name, df)
+        return df
 
 def get_all_codes_df():
     '''
@@ -130,19 +180,45 @@ def get_profit_data_thru_code(code, year, quarter):
     business_income,营业收入(百万元)
     bips,每股主营业务收入(元)
     '''
-    print("\nGet %s profit on %s year and %s quarter\n"%(code, year, quarter))
     k = "%s-%s"%(year, quarter)
     global global_profit_data
     if k in global_profit_data:
         df = global_profit_data[k]
     else:
-        df = ts.get_profit_data(year, quarter)
+        df = get_profit_data(year, quarter)
         global_profit_data[k] = df
     if df is None:
         return None
     else:
         return df[df['code'] == code]
 
+def get_profit_data(year, quarter):
+    '''
+    抓取，可以存在数据库
+    '''
+    k = "%s-%s"%(year, quarter)
+    table_name = "%s_profit"%(k)
+    if table_exists(table_name):
+        df = read_df_from_db(table_name, index_col='code')
+        df['code'] = df.index
+    else:
+        df = ts.get_profit_data(year, quarter)
+        df_to_db(table_name, df)
+    return df
+
+def get_growth_data(year, quarter):
+    '''
+    抓取，可以存在数据库
+    '''
+    k = "%s-%s"%(year, quarter)
+    table_name = "%s_growth"%(k)
+    if table_exists(table_name):
+        df = read_df_from_db(table_name, index_col='code')
+        df['code'] = df.index
+    else:
+        df = ts.get_growth_data(year, quarter)
+        df_to_db(table_name, df)
+    return df
 
 def get_growth_data_thru_code(code, year, quarter):
     '''
@@ -156,13 +232,12 @@ def get_growth_data_thru_code(code, year, quarter):
     epsg,每股收益增长率
     seg,股东权益增长率
     '''
-    print("\nGet %s growth info on %s year and %s quarter\n"%(code, year, quarter))
     k = "%s-%s"%(year, quarter)
     global global_growth_data
     if k in global_growth_data:
         df = global_growth_data[k]
     else:
-        df = ts.get_growth_data(year, quarter)
+        df = get_growth_data(year, quarter)
         global_growth_data[k] = df
     if df is None:
         return None

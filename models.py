@@ -4,6 +4,7 @@ from sqlalchemy import Table, Column, Integer, String, MetaData, ForeignKey, Ind
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declared_attr
+import numpy as np
 
 engine = create_engine('mysql+pymysql://wpzero:1234@127.0.0.1/best_stocks')
 metadata = MetaData()
@@ -17,6 +18,29 @@ industry_codes = Table('industry_codes', metadata,
                        Column('code', String),
                        Column('c_name', String)
 )
+
+def convert_to_py_type(v):
+    '''
+    转化为python默认的类型
+    '''
+    if isinstance(v, np.generic):
+        return np.asscalar(v)
+    else:
+        return v
+
+
+def table_exists(table_name):
+    '''
+    判断table_name是否存在
+    '''
+    return engine.dialect.has_table(conn, table_name)
+
+def df_to_db(table_name, df):
+    '''
+    save df to db
+    '''
+    if (df is not None) and len(df) > 0:
+        df.to_sql(table_name, engine, if_exists='replace', dtype={'date': sa.VARCHAR(255)})
 
 class User(Base):
     __tablename__ = 'users'
