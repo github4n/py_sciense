@@ -54,17 +54,6 @@ class DayBacktest:
             self.handle_bar(dt)
 
     def get_h_data_df(self, code, date):
-        # global global_h_data
-        # if code in global_h_data:
-        #     df = global_h_data[code].copy()
-        # else:
-        #     df = ts.get_hist_data(code, start=self.start_d().strftime('%Y-%m-%d'))
-        #     if df is None:
-        #         return df
-        #     df.index = pd.to_datetime(df.index)
-        #     global_h_data[code] = df.copy()
-        # df = df.sort_index(ascending=True)
-        # df = df.loc[df.index <= date]
         df = data_pool.get_hist_data_df(code, date)
         return df
 
@@ -234,8 +223,8 @@ class SepaDayBacktest(DayBacktest):
             # 止盈卖出
             # 20%的时候，卖出至少3/4
             elif ((today_price - stock.price) / stock.price >= top_level) and stock.count * today_price > block_money * 1/4:
-                if (stock.count * 1/2 * 1/2) >= 100:
-                    result.append({ 'code': code, 'count': self.stock_int(stock.count * 1/2 * 1/2) })
+                if (stock.count * 1/2) >= 100:
+                    result.append({ 'code': code, 'count': self.stock_int(stock.count * 1/2) })
                 else:
                     result.append({ 'code': code, 'count': stock.count })
 

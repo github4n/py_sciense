@@ -280,6 +280,23 @@ def vcp_test(df, volume_column='volume', close_column='close', days=10, v_days=5
         bias_lower(df, column=close_column, days=days)
 
 
+def ma_sub_abs_lower(df, column='close', days=10, long_step=20, short_step=5, percentage=0.7):
+    '''
+    两条MA线相近
+    '''
+    k = "%s_%s_%s_sub_abs"%(column, long_step, short_step)
+    df = df.copy()
+    df = df.sort_index(ascending=True)
+    df = add_sma(df, column, long_step)
+    df = add_sma(df, column, short_step)
+    k1 = sma_key(column, long_step)
+    k2 = sma_key(column, short_step)
+    df[k] = (df[k1] - df[k2]).abs()
+    test_k = 'ma_sub_test'
+    df[test_k] = np.where(df[k] <= df[k].shift(1), 1, 0)
+    df = df.tail(days)
+    return (len(df.loc[df[test_k] == 1]) / len(df)) >= percentage
+
 def lower(df, column='volume', days=10, percentage=0.7):
     '''
     column的递减
