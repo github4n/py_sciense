@@ -9,6 +9,7 @@ from models import conn, industry_codes, engine
 import datetime
 from sqlalchemy.sql import select
 from models import Session, FRecord, FStock, FProfile, industry_codes, table_exists, df_to_db
+import time
 
 # global variable to cache for performance
 global_growth_data = {}
@@ -65,9 +66,15 @@ def get_h_data(code):
     if table_exists(table_name):
         return read_df_from_db(table_name, index_col='date')
     else:
-        df = ts.get_h_data(code, start=start_d)
-        df_to_db(table_name, df)
-        return df
+        time.sleep(60 * 3)
+        try:
+            df = ts.get_h_data(code, start=start_d)
+            df_to_db(table_name, df)
+            return df
+        except Exception as inst:
+            print(inst)
+            print("%s\n"%(code))
+            return None
 
 def get_hist_data(code):
     '''
