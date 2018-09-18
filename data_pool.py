@@ -31,10 +31,13 @@ def get_hist_data_df(code, date):
     '''
     global global_hist_data
     if code in global_hist_data:
+        if global_hist_data[code] is None:
+            return None
         df = global_hist_data[code].copy()
     else:
         df = get_hist_data(code)
         if df is None:
+            global_hist_data[code] = None
             return df
         df.index = pd.to_datetime(df.index)
         global_hist_data[code] = df.copy()

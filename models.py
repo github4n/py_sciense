@@ -105,5 +105,23 @@ class FStock(StockMixin, Base):
 class FProfile(ProfileMixin, Base):
     __tablename__ = 'f_profiles'
 
+class Rps(object):
+    __tablename__ = 'rps'
+    id = Column(Integer, primary_key=True)
+    code = Column(String(255), nullable=False, index=True)
+    date = Column(DateTime, nullable=False)
+    days = Column(Integer, nullable=False)
+    value = Column(Float, nullable=False)
+    __table_args__ = (Index('code', 'days', 'date'),)
+
+class ExtrsList(object):
+    __tablename__ = 'extrs_list'
+    id = Column(Integer, primary_key=True)
+    code = Column(String(255), nullable=False, index=True)
+    date = Column(DateTime, nullable=False)
+    days = Column(Integer, nullable=False)
+    data = Column(JSON)
+    __table_args__ = (Index('code', 'days', 'date'),)
+
 # 用来创建数据库结构
 Base.metadata.create_all(engine)

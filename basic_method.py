@@ -7,6 +7,8 @@ import talib as ta
 import numpy as np
 from models import conn, industry_codes, engine
 import datetime
+import data_pool as dp
+from models import Session, Rps, ExtrsList
 
 SMA_FAST = 50
 SMA_SLOW = 200
@@ -20,6 +22,7 @@ STOCH_D = 3
 SIGNAL_TOL = 3
 Y_AXIS_SIZE = 12
 
+CACHE = True
 
 def sepa_step_check(df, days):
     '''
@@ -27,8 +30,8 @@ def sepa_step_check(df, days):
     2. 当前收盘价大于五十天局限的值
     3. 五十天天均线值大于一百五十天的均线值
     4. 一百五十天的均线值大于两百天的均线值
-    <5> 当前股价至少出于一年内最高股价的25%以内
-    <6> 当前股价至少比最近一年最低股价至少高30%
+    5. 当前股价至少出于一年内最高股价的25%以内
+    6. 当前股价至少比最近一年最低股价至少高30%
     '''
     if df is None:
         return False
@@ -450,3 +453,73 @@ def sma_uptrend(df, step=20):
     new_df = new_df.tail(2)
     key = "SMA_%s_%s"%('close', step)
     return new_df[key].diff()[1:].sum() >= 0
+
+def rps(code, date, days=120):
+    '''
+    计算RPS值
+    '''
+    if CACHE:
+        session = Session()
+        record = session.query(Rps).filter_by(code=code, date=date, days=days).first()
+        if record is not None:
+            return record.value
+
+    result = 0
+    sorted_list, codes_count = extrs_sorted_list(date, days=days)
+    ex = extrs(code, date, days=days)
+    if not (ex is None or ex not in sorted_list):
+        location = sorted_list.index(ex)
+        location = location + 1
+        result = (1 - location/codes_count) * 100
+
+    if CACHE:
+        record = Rps(code=code, date=date, days=days, result=result)
+        session.add(record)
+        session.commit()
+    return result
+
+def extrs(code, date, days=120):
+    '''
+    计算extrs的值
+    '''
+    df = dp.get_hist_data_df(code, date)
+    if df is None:
+        print("%s df empty"%(code))
+        return None
+    df = df.sort_index(ascending=True)
+    today = df.index[-1]
+    if today != date or len(df) <= days:
+        return None
+    else:
+        c = df['close'][-1]
+        r = df['close'][-1 - days]
+        return (c - r)/r
+
+def extrs_sorted_list(date, days=120):
+    '''
+    获得RPS的sorted_list
+    '''
+
+    if CACHE:
+        session = Session()
+        record = session.query(ExtrsList).filter_by(date=date, days=days).first()
+        if record is not None:
+            return sorted(record.data['scores'], reverse=True), record.data['codes_count']
+
+    codes_count = 0
+    scores = []
+    all_codes_df = dp.get_all_codes_df()
+    for index, row in all_codes_df.iterrows():
+        ex = extrs(row['code'], date, days)
+        if ex is not None:
+            scores.append(ex)
+            codes_count = codes_count + 1
+    scores = sorted(scores, reverse=True)
+
+    if CACHE:
+        record = ExtrsList(date=date, days=days, data={ 'scores': scores, 'codes_count': codes_count })
+        session.add(record)
+        session.commit()
+        session.close()
+
+    return scores, codes_count
