@@ -19,6 +19,12 @@ all_codes_df = []
 # 抓取h_data的开始时间
 start_d = '2014-01-01'
 
+TOKEN = '415f2e5e4461aa8d71e8d0f2142e95007d19eaed3ed8d90eddf29f46'
+
+ts.set_token(TOKEN)
+
+pro = ts.pro_api()
+
 def read_df_from_db(table_name, index_col='date'):
     '''
     从数据库中读取数据组成dataframe
@@ -65,6 +71,9 @@ def get_h_data(code):
     '''
     获取数据，并且存在数据库中
     '''
+    if code in ['600656', '600832', '600806', '601268', '600222']:
+        return None
+
     table_name = "%s_hlong"%(code)
     if table_exists(table_name):
         return read_df_from_db(table_name, index_col='date')

@@ -1,4 +1,4 @@
-from models import Session, MRecord, MStock, MProfile, FRecord, FStock, FProfile
+from models import Session, MRecord, MStock, MProfile, FRecord, FStock, FProfile, convert_date
 from datetime import datetime
 import tushare as ts
 import pandas as pd
@@ -83,10 +83,7 @@ class Pf:
         '''
         获得有效的时间
         '''
-        date = datetime.now() if date is None else date
-        if isinstance(date, pd.Timestamp):
-            date = date.to_pydatetime()
-        return date
+        return convert_date(date)
 
     def get_current_stocks(self):
         session = Session()

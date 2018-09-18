@@ -5,8 +5,10 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declared_attr
 import numpy as np
+from datetime import datetime
+import pandas as pd
 
-engine = create_engine('mysql+pymysql://wpzero:1234@127.0.0.1/best_stocks')
+engine = create_engine('mysql+pymysql://wpzero:1234@127.0.0.1/best_stocks', connect_args={'connect_timeout': 800})
 metadata = MetaData()
 conn = engine.connect()
 Base = declarative_base()
@@ -41,6 +43,15 @@ def df_to_db(table_name, df):
     '''
     if (df is not None) and len(df) > 0:
         df.to_sql(table_name, engine, if_exists='replace', dtype={'date': sa.VARCHAR(255)})
+
+def convert_date(date):
+    '''
+    获得有效的时间
+    '''
+    date = datetime.now() if date is None else date
+    if isinstance(date, pd.Timestamp):
+        date = date.to_pydatetime()
+    return date
 
 class User(Base):
     __tablename__ = 'users'
@@ -105,7 +116,7 @@ class FStock(StockMixin, Base):
 class FProfile(ProfileMixin, Base):
     __tablename__ = 'f_profiles'
 
-class Rps(object):
+class Rps(Base):
     __tablename__ = 'rps'
     id = Column(Integer, primary_key=True)
     code = Column(String(255), nullable=False, index=True)
@@ -114,14 +125,13 @@ class Rps(object):
     value = Column(Float, nullable=False)
     __table_args__ = (Index('code', 'days', 'date'),)
 
-class ExtrsList(object):
+class ExtrsList(Base):
     __tablename__ = 'extrs_list'
     id = Column(Integer, primary_key=True)
-    code = Column(String(255), nullable=False, index=True)
     date = Column(DateTime, nullable=False)
     days = Column(Integer, nullable=False)
     data = Column(JSON)
-    __table_args__ = (Index('code', 'days', 'date'),)
+    __table_args__ = (Index('days', 'date'),)
 
 # 用来创建数据库结构
 Base.metadata.create_all(engine)

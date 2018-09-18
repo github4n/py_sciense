@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.sql import select
 import talib as ta
 import numpy as np
-from models import conn, industry_codes, engine
+from models import conn, industry_codes, engine, convert_date
 import datetime
 import data_pool as dp
 from models import Session, Rps, ExtrsList
@@ -458,6 +458,7 @@ def rps(code, date, days=120):
     '''
     计算RPS值
     '''
+    date = convert_date(date)
     if CACHE:
         session = Session()
         record = session.query(Rps).filter_by(code=code, date=date, days=days).first()
@@ -473,7 +474,7 @@ def rps(code, date, days=120):
         result = (1 - location/codes_count) * 100
 
     if CACHE:
-        record = Rps(code=code, date=date, days=days, result=result)
+        record = Rps(code=code, date=date, days=days, value=result)
         session.add(record)
         session.commit()
     return result
@@ -482,6 +483,7 @@ def extrs(code, date, days=120):
     '''
     计算extrs的值
     '''
+    date = convert_date(date)
     df = dp.get_hist_data_df(code, date)
     if df is None:
         print("%s df empty"%(code))
@@ -499,6 +501,7 @@ def extrs_sorted_list(date, days=120):
     '''
     获得RPS的sorted_list
     '''
+    date = convert_date(date)
 
     if CACHE:
         session = Session()

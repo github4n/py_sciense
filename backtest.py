@@ -130,7 +130,6 @@ class TestDayBacktest(DayBacktest):
         if bm.revert_point_1(df):
             print(date)
 
-
 class SepaDayBacktest(DayBacktest):
 
     def handle_bar(self, date):
@@ -205,7 +204,7 @@ class SepaDayBacktest(DayBacktest):
         result = []
         leave_level = 0.10
         top_level = 0.20
-        top_level_1 = 0.10
+        top_level_1 = 0.15
         stocks = self.current_stocks()
         session = Session()
         block_money = self.get_block_money(date, type='close')
@@ -228,7 +227,7 @@ class SepaDayBacktest(DayBacktest):
                 else:
                     result.append({ 'code': code, 'count': stock.count })
 
-            # 10%的时候，卖出至少1/2
+            # 15%的时候，卖出至少1/2
             elif ((today_price - stock.price) / stock.price >= top_level_1) and stock.count * today_price > block_money * 1/2:
                 if stock.count * 1/2 >= 100:
                     result.append({ 'code': code, 'count': self.stock_int(stock.count * 1/2) })
