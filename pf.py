@@ -2,21 +2,52 @@ from models import Session, MRecord, MStock, MProfile, FRecord, FStock, FProfile
 from datetime import datetime
 import tushare as ts
 import pandas as pd
+import numpy as np
+import data_pool
 
 class Pf:
     def __init__(self, t='m'):
         self.t = t
 
     def set_money(self, money):
+        money = self.convert_to_py_type(money)
         profile = self.get_profile()
-        profile.money = money
+        profile.money = self.convert_to_py_type(money)
         session = Session()
         session.add(profile)
         session.commit()
+        session.expunge_all()
         session.close()
 
     def get_money(self):
         return self.get_profile().money
+
+    def get_profile_account_thru_date(self, date, type='close'):
+        '''
+        用于回测
+        获得账号内现金和股票的市值
+        '''
+        return self.get_profile().money + self.get_profile_stocks_df_thru_date(date, type=type)['account'].sum()
+
+    def get_profile_stocks_df_thru_date(self, date, type='close'):
+        '''
+        用于回测
+        获得所有股票的dataframe, 用于回测
+        '''
+        data = []
+        labels = ['code', 'price', 'trade_price', 'date', 'count', 'account']
+        indexes = []
+        current_stocks = self.get_current_stocks()
+        for stock in current_stocks:
+            if type == 'close':
+                trade_price = data_pool.get_price(stock.code, date)
+            else:
+                trade_price = data_pool.get_open_price(stock.code, date)
+            data.append((stock.code, stock.price, trade_price, stock.date, stock.count, trade_price * stock.count))
+            indexes.append(stock.code)
+        df = pd.DataFrame.from_records(data, columns=labels, index=indexes)
+        df.index.name = 'code_index'
+        return df
 
     def get_profile_account(self):
         '''
@@ -48,62 +79,100 @@ class Pf:
         df.index.name = 'code_index'
         return df
 
+    def convert_date(self, date):
+        '''
+        获得有效的时间
+        '''
+        date = datetime.now() if date is None else date
+        if isinstance(date, pd.Timestamp):
+            date = date.to_pydatetime()
+        return date
+
     def get_current_stocks(self):
         session = Session()
         stocks = session.query(self.get_stock_class()).filter_by(status=1).all()
+        session.expunge_all()
         session.close()
         return stocks
 
-    def buy_stock(self, code, count, price):
+    def buy_stock(self, code, count, price, date=None):
         '''
         买股票
         '''
-        need_money = count * price
-        profile = self.get_profile()
-        if need_money > profile.money:
+        date = self.convert_date(date)
+        count = self.convert_to_py_type(count)
+        price = self.convert_to_py_type(price)
+        if count == 0:
             return
         session = Session()
-        record = self.get_record_class()(code=code, count=count, price=price, date=datetime.now(), type=1)
-        stock = self.get_current_stock(code)
-        session.add(record)
+        need_money = count * price
+        profile = self.get_profile()
         session.add(profile)
+        if need_money > profile.money:
+            session.expunge_all()
+            session.close()
+            return
+        record = self.get_record_class()(code=code, count=count, price=price, date=date, type=1)
+        stock = self.get_current_stock(code, date=date)
+        session.add(record)
         session.add(stock)
-        stock.price = ((stock.count * stock.price) + (count * price)) / (stock.count + count)
-        stock.count = stock.count + count
-        profile.money = profile.money - need_money
+        stock.price = self.convert_to_py_type(((stock.count * stock.price) + (count * price)) / (stock.count + count))
+        stock.count = self.convert_to_py_type(stock.count + count)
+        profile.money = self.convert_to_py_type(profile.money - need_money)
         session.commit()
+        session.expunge_all()
         session.close()
 
-    def sell_stock(self, code, count, price):
+    def sell_stock(self, code, count, price, date=None):
         '''
         卖股票
         '''
+        date = self.convert_date(date)
+        count = self.convert_to_py_type(count)
+        price = self.convert_to_py_type(price)
+        if count == 0:
+            return
         all_money = count * price
         profile = self.get_profile()
-        stock = self.get_current_stock(code)
-        if stock.count < count:
-            return
+        stock = self.get_current_stock(code, date=date)
         session = Session()
-        record = self.get_record_class()(code=code, count=count, price=price, date=datetime.now(), type=0)
-        session.add(record)
         session.add(stock)
         session.add(profile)
+        if stock.count < count:
+            session.expunge_all()
+            session.close()
+            return
+        record = self.get_record_class()(code=code, count=count, price=price, date=date, type=0)
+        session.add(record)
         if stock.count > count:
-            stock.count = stock.count - count
-            new_stop_stock = self.get_stock_class()(code=code, count=count, price=stock.price, date=stock.date, stop_date=datetime.now(), status=0, stop_price=price)
+            stock.count = self.convert_to_py_type(stock.count - count)
+            new_stop_stock = self.get_stock_class()(code=code, count=count, price=stock.price, date=stock.date, stop_date=date, status=0, stop_price=price)
             session.add(new_stop_stock)
         else:
             stock.status = 0
-            stock.stop_date = datetime.now()
-        profile.money = profile.money + all_money
+            stock.stop_price = price
+            stock.stop_date = date
+        profile.money = self.convert_to_py_type(profile.money + all_money)
         session.commit()
+        session.expunge_all()
         session.close()
 
-    def get_current_stock(self, code):
+    def convert_to_py_type(self, v):
+        '''
+        转化为python默认的类型
+        '''
+        if isinstance(v, np.generic):
+            return np.asscalar(v)
+        else:
+            return v
+
+    def get_current_stock(self, code, date=None):
+        date = self.convert_date(date)
         session = Session()
         stock = session.query(self.get_stock_class()).filter_by(code=code, status=1).first()
         if stock is None:
-            stock = self.get_stock_class()(code=code, status=1, date=datetime.now(), count=0, price=0)
+            stock = self.get_stock_class()(code=code, status=1, date=date, count=0, price=0)
+        session.expunge_all()
         session.close()
         return stock
 
@@ -115,6 +184,7 @@ class Pf:
             session.add(new_profile)
             session.commit()
         profile = session.query(self.get_profile_class()).first()
+        session.expunge_all()
         session.close()
         return profile
 
