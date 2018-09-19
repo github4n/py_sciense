@@ -6,7 +6,7 @@ from sqlalchemy.sql import select
 import talib as ta
 import numpy as np
 from models import conn, industry_codes, engine, convert_date
-from datetime import datetime
+from datetime import datetime, timedelta
 from sqlalchemy.sql import select
 from models import Session, FRecord, FStock, FProfile, industry_codes, table_exists, df_to_db
 import time
@@ -15,6 +15,7 @@ import time
 global_growth_data = {}
 global_profit_data = {}
 global_hist_data = {}
+global_daily_data = {}
 all_codes_df = []
 # 抓取h_data的开始时间
 start_d = '2010-01-01'
@@ -27,16 +28,62 @@ ts.set_token(TOKEN)
 
 pro = ts.pro_api()
 
+def get_daily_data_df(ts_code, date):
+    '''
+    从数据库中获取daily数据
+    '''
+    global global_daily_data
+    if ts_code in global_daily_data:
+        df = global_daily_data[ts_code]
+    else:
+        df = get_daily_data(ts_code)
+    if df is None:
+        return df
+    df.index = pd.to_datetime(df.index)
+    df = df.sort_index(ascending=True)
+    return df.loc[df.index <= date]
+
+def get_daily_data(ts_code):
+    table_name = "%s_daily"%(ts_code.replace('.', '_'))
+    if table_exists(table_name):
+        df = read_df_from_db(table_name, index_col='date')
+        df.index = pd.to_datetime(df.index)
+        return df
+    else:
+        return None
+
 def fetch_daily_data_to_db(ts_code, end_date=None):
+    '''
+    抓日数据
+    20180914
+    603998.SH
+    '''
     if end_date is None:
         end_date = datetime.now().strftime("%Y%m%d")
     if not isinstance(end_date, str):
         end_date = convert_date(end_date).strftime("%Y%m%d")
+    start_date = get_daily_start_date(ts_code)
     table_name = "%s_daily"%(ts_code.replace('.', '_'))
-    df = pro.daily(ts_code=ts_code, start_date=daily_start, end_date=end_date)
+    df = pro.daily(ts_code=ts_code, start_date=start_date, end_date=end_date)
     df.index = pd.to_datetime(df['trade_date'])
     df.index.name = 'date'
-    df_to_db(table_name, df)
+    if table_exists(table_name):
+        df_to_db(table_name, df, if_exists='append')
+    else:
+        df_to_db(table_name, df)
+
+def get_daily_start_date(ts_code):
+    table_name = "%s_daily"%(ts_code.replace('.', '_'))
+    if table_exists(table_name):
+        old_df = get_daily_data(ts_code)
+        if old_df is None or len(old_df) == 0:
+            start_date = daily_start
+        else:
+            old_df = old_df.sort_index(ascending=True)
+            start_date = (convert_date(old_df.index[-1]) + timedelta(days=1)).strftime("%Y%m%d")
+    else:
+        start_date = daily_start
+    return start_date
 
 def fetch_stock_basic_to_db():
     '''
