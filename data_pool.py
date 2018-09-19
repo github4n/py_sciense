@@ -25,6 +25,31 @@ ts.set_token(TOKEN)
 
 pro = ts.pro_api()
 
+def fetch_trade_cal_to_db(start_date='20100101', end_date='2020-01-01'):
+    '''
+    抓取交易日历到数据库
+    '''
+    sse_df = pro.trade_cal(exchange_id='SSE', start_date=start_date, end_date=end_date)
+    szse_df = pro.trade_cal(exchange_id='SZSE', start_date=start_date, end_date=end_date)
+    sse_df['sse_is_open'] = sse_df['is_open']
+    sse_df['szse_is_open'] = szse_df['is_open']
+    sse_df['date'] = pd.to_datetime(sse_df['cal_date'])
+    df = sse_df.loc[:, ['sse_is_open', 'szse_is_open']]
+    df.index = sse_df['date']
+    df_to_db('trade_cal', df)
+
+def trade_cal(start_date, end_date):
+    '''
+    获得指定时间段的交易日历
+    '''
+    df = read_df_from_db('trade_cal', index_col='date')
+    df = df.sort_index(ascending=True)
+    df.index = pd.to_datetime(df.index)
+    df['date'] = df.index
+    df = df.loc[df['date'] >= start_date]
+    df = df.loc[df['date'] <= end_date]
+    return df
+
 def read_df_from_db(table_name, index_col='date'):
     '''
     从数据库中读取数据组成dataframe

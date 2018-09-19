@@ -38,20 +38,19 @@ class DayBacktest:
         '''
         print(date)
 
-    def datetime_indexes(self):
+    def trade_cal(self):
         '''
         获得时间序列
         '''
-        df = ts.get_hist_data('000661', start=self.start_date.strftime('%Y-%m-%d'))
-        df.index = pd.to_datetime(df.index)
-        df = df.sort_index(ascending=True)
-        df = df.loc[df.index >= self.start_date]
-        df = df.loc[df.index <= self.end_date]
-        return df.index
+        df = data_pool.trade_cal(self.start_date, self.end_date)
+        return df
 
     def run(self):
-        for dt in self.datetime_indexes():
-            self.handle_bar(dt)
+        for index, row in self.trade_cal().iterrows():
+            if row['sse_is_open'] == 1 or row['szse_is_open'] == 1:
+                self.sse_is_open = row['sse_is_open']
+                self.szse_is_open = row['szse_is_open']
+                self.handle_bar(dt)
 
     def get_h_data_df(self, code, date):
         df = data_pool.get_hist_data_df(code, date)
