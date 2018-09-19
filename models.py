@@ -37,12 +37,12 @@ def table_exists(table_name):
     '''
     return engine.dialect.has_table(conn, table_name)
 
-def df_to_db(table_name, df):
+def df_to_db(table_name, df, if_exists='replace'):
     '''
     save df to db
     '''
     if (df is not None) and len(df) > 0:
-        df.to_sql(table_name, engine, if_exists='replace', dtype={'date': sa.VARCHAR(255)})
+        df.to_sql(table_name, engine, if_exists=if_exists, dtype={'date': sa.VARCHAR(255)})
 
 def convert_date(date):
     '''

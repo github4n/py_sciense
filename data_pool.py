@@ -5,8 +5,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.sql import select
 import talib as ta
 import numpy as np
-from models import conn, industry_codes, engine
-import datetime
+from models import conn, industry_codes, engine, convert_date
+from datetime import datetime
 from sqlalchemy.sql import select
 from models import Session, FRecord, FStock, FProfile, industry_codes, table_exists, df_to_db
 import time
@@ -17,13 +17,26 @@ global_profit_data = {}
 global_hist_data = {}
 all_codes_df = []
 # 抓取h_data的开始时间
-start_d = '2014-01-01'
+start_d = '2010-01-01'
+
+daily_start = '20100101'
 
 TOKEN = '415f2e5e4461aa8d71e8d0f2142e95007d19eaed3ed8d90eddf29f46'
 
 ts.set_token(TOKEN)
 
 pro = ts.pro_api()
+
+def fetch_daily_data_to_db(ts_code, end_date=None):
+    if end_date is None:
+        end_date = datetime.now().strftime("%Y%m%d")
+    if not isinstance(end_date, str):
+        end_date = convert_date(end_date).strftime("%Y%m%d")
+    table_name = "%s_daily"%(ts_code.replace('.', '_'))
+    df = pro.daily(ts_code=ts_code, start_date=daily_start, end_date=end_date)
+    df.index = pd.to_datetime(df['trade_date'])
+    df.index.name = 'date'
+    df_to_db(table_name, df)
 
 def fetch_stock_basic_to_db():
     '''
@@ -224,7 +237,7 @@ def convert_year_quarter_to_datetime(year, quarter):
     提供year和quarter然后返回datetime
     '''
     date_str = "%s-%s"%(year, quarter * 3)
-    return datetime.datetime.strptime(date_str, '%Y-%m')
+    return datetime.strptime(date_str, '%Y-%m')
 
 
 def get_profit_data_thru_code(code, year, quarter):

@@ -6,7 +6,7 @@ import data_pool as dp
 import time
 
 
-engine = create_engine('mysql+pymysql://wpzero:1234@127.0.0.1/best_stocks')
+engine = create_engine('mysql+pymysql://root:1234@127.0.0.1/best_stocks')
 
 df = ts.get_hist_data('000861')
 df.to_sql('hist_data', engine, if_exists='append', dtype={'date': sa.VARCHAR(255)})
@@ -28,10 +28,14 @@ sz_50.to_sql('sz_50_codes', engine, if_exists='replace', dtype={'date': sa.VARCH
 zz_500 = ts.get_zz500s()
 zz_500.to_sql('zz_500_codes', engine, if_exists='replace', dtype={'date': sa.VARCHAR(255)})
 
+# ---------- 抓股票池子
+dp.fetch_stock_basic_to_db()
 
+# ---------- 抓交易日期到股票池
+dp.fetch_trade_cal_to_db()
 
-date = datetime.strptime('2014-01-01', '%Y-%m-%d')
-all_codes_df = dp.get_all_codes_df()
-for index, row in all_codes_df.iterrows():
-    time.sleep(60 * 5)
-    dp.get_h_data(row['code'], date)
+# ---------- 抓近期的daily数据
+end_date = '20180915'
+codes_df = dp.stock_basic_df()
+for index, row in codes_df.iterrows():
+    dp.fetch_daily_data_to_db(row['ts_code'], end_date=end_date)
