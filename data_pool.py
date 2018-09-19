@@ -25,6 +25,14 @@ ts.set_token(TOKEN)
 
 pro = ts.pro_api()
 
+def fetch_stock_basic_to_db():
+    '''
+    获得股票列表到数据库
+    '''
+    df = pro.stock_basic(exchange_id='')
+    df_to_db('stock_basic', df)
+
+
 def fetch_trade_cal_to_db(start_date='20100101', end_date='2020-01-01'):
     '''
     抓取交易日历到数据库
@@ -37,6 +45,14 @@ def fetch_trade_cal_to_db(start_date='20100101', end_date='2020-01-01'):
     df = sse_df.loc[:, ['sse_is_open', 'szse_is_open']]
     df.index = sse_df['date']
     df_to_db('trade_cal', df)
+
+def stock_basic_df():
+    '''
+    股票列表
+    '''
+    df = read_df_from_db('stock_basic', index_col='ts_code')
+    df['ts_code'] = df.index
+    return df
 
 def trade_cal(start_date, end_date):
     '''
