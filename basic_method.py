@@ -209,7 +209,7 @@ def revert_point_1(df):
     '''
     完整的vcp + 放阳
     1. close 的值增长了0.03以上
-    2. volume 的值增长了0.3以上
+    2. vol 的值增长了0.3以上
     3. 20天平均线向上
     4. 进五天有VCP的趋势
     5. 成交量五天最高
@@ -217,7 +217,7 @@ def revert_point_1(df):
     result = True
     result = result and \
         open_sub_close_percentage(df, close_column='close', open_column='open', percentage=0.03) and \
-        high_percentage(df, column='volume', percentage=0.3) and \
+        high_percentage(df, column='vol', percentage=0.3) and \
         sma_uptrend(df) and \
         highest_in_days(df)
 
@@ -234,7 +234,7 @@ def revert_point_1(df):
     return result and \
         vcp_result
 
-def highest_in_days(df, column='volume', days=5):
+def highest_in_days(df, column='vol', days=5):
     '''
     days天内最高
     '''
@@ -262,7 +262,7 @@ def vcp(df):
         vcp_test(df, days=30)
 
 
-def vcp_test_double_sma(df, volume_column='volume', close_column='close', days=10, v_days=5):
+def vcp_test_double_sma(df, volume_column='vol', close_column='close', days=10, v_days=5):
     '''
     VCP的检测
     '''
@@ -270,7 +270,7 @@ def vcp_test_double_sma(df, volume_column='volume', close_column='close', days=1
         bias_lower_double_sma(df, column=close_column, days=days)
 
 
-def vcp_test_double_ema(df, volume_column='volume', close_column='close', days=10, v_days=5):
+def vcp_test_double_ema(df, volume_column='vol', close_column='close', days=10, v_days=5):
     '''
     VCP的检测
     '''
@@ -278,7 +278,7 @@ def vcp_test_double_ema(df, volume_column='volume', close_column='close', days=1
         bias_lower_double_ema(df, column=close_column, days=days)
 
 
-def vcp_test(df, volume_column='volume', close_column='close', days=10, v_days=5):
+def vcp_test(df, volume_column='vol', close_column='close', days=10, v_days=5):
     return lower(df, column=volume_column, days=v_days) and \
         bias_lower(df, column=close_column, days=days)
 
@@ -300,7 +300,7 @@ def ma_sub_abs_lower(df, column='close', days=10, long_step=20, short_step=5, pe
     df = df.tail(days)
     return (len(df.loc[df[test_k] == 1]) / len(df)) >= percentage
 
-def lower(df, column='volume', days=10, percentage=0.7):
+def lower(df, column='vol', days=10, percentage=0.7):
     '''
     column的递减
     '''
@@ -328,7 +328,7 @@ def bias_lower(df, column='close', days=10, short_step=5, long_step=20, percenta
     close_df = close_df.tail(days)
     return (len(close_df.loc[close_df[abs_bias_test_k] == 1]) / len(close_df)) >= percentage
 
-def sma_lower_double_sma(df, column='volume', step=10, days=10, percentage=0.8):
+def sma_lower_double_sma(df, column='vol', step=10, days=10, percentage=0.8):
     '''
     column的sma的值递减
     '''
@@ -346,7 +346,7 @@ def sma_lower_double_sma(df, column='volume', step=10, days=10, percentage=0.8):
     volume_df = volume_df.tail(days)
     return (len(volume_df.loc[volume_df[volume_lower_k] == 1]) / len(volume_df)) >= percentage
 
-def ema_lower_double_ema(df, column='volume', step=10, days=10, percentage=0.8):
+def ema_lower_double_ema(df, column='vol', step=10, days=10, percentage=0.8):
     '''
     column的ema的值递减法
     '''

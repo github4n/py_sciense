@@ -50,11 +50,14 @@ class DayBacktest:
             if row['sse_is_open'] == 1 or row['szse_is_open'] == 1:
                 self.sse_is_open = row['sse_is_open']
                 self.szse_is_open = row['szse_is_open']
-                self.handle_bar(dt)
+                self.today = row['date']
+                self.handle_bar(self.today)
 
-    def get_h_data_df(self, code, date):
-        df = data_pool.get_hist_data_df(code, date)
-        return df
+    def get_daily_data_df(self, ts_code, date):
+        '''
+        获得日线数据
+        '''
+        return data_pool.get_daily_data_df(ts_code, date)
 
     def start_d(self):
         '''
@@ -62,24 +65,23 @@ class DayBacktest:
         '''
         return self.start_date - relativedelta(years=1)
 
-    def get_price(self, code, date):
+    def get_price(self, ts_code, date):
         '''
         获得某个股票的收盘价格
         '''
-        df = data_pool.get_hist_data_df(code, date)
-        df = df.sort_index(ascending=True)
-        return df.tail(1)['close'].sum()
+        return data_pool.get_price(ts_code, date)
 
-    def get_open_price(self, code, date):
-        df = data_pool.get_hist_data_df(code, date)
-        df = df.sort_index(ascending=True)
-        return df.tail(1)['open'].sum()
+    def get_open_price(self, ts_code, date):
+        '''
+        获得某个股票的开盘价格
+        '''
+        return data_pool.get_open_price(ts_code, date)
 
-    def get_all_codes_df(self):
+    def stock_basic_df(self):
         '''
         获得所有的股票
         '''
-        return data_pool.get_all_codes_df()
+        return data_pool.stock_basic_df()
 
     def get_profit_data_df(self, code, date):
         '''
@@ -121,11 +123,23 @@ class DayBacktest:
         '''
         return int(count/100) * 100
 
+    def convert_ts_code_to_code(self, ts_code):
+        '''
+        ts_code 2 code
+        '''
+        return data_pool.convert_ts_code_to_code(ts_code)
+
+    def convert_code_to_ts_code(self, code):
+        '''
+        code 2 ts_code
+        '''
+        return data_pool.convert_code_to_ts_code(code)
+
 class TestDayBacktest(DayBacktest):
 
     def handle_bar(self, date):
-        code = '603568'
-        df = self.get_hi_data_df(code, date)
+        ts_code = self.convert_code_to_ts_code('603568')
+        df = self.get_daily_data_df(ts_code, date)
         if bm.revert_point_1(df):
             print(date)
 
@@ -154,45 +168,49 @@ class SepaDayBacktest(DayBacktest):
         '''
         if len(self.sell_stocks_pool) > 0:
             for stock_item in self.sell_stocks_pool:
-                code = stock_item['code']
+                ts_code = stock_item['ts_code']
                 count = stock_item['count']
-                self.profile.sell_stock(code, count, self.get_open_price(code, date), date=date)
+                price = self.get_open_price(ts_code, date)
+                if price is None:
+                    continue
+                self.profile.sell_stock(ts_code, count, price, date=date)
 
     def buy_stocks(self, date):
         '''
         买股票
         '''
-        # block_size = 0.2
-        # all_count = self.profile.get_profile_account_thru_date(date, type='open')
-        # block_money = all_count * block_size
         block_money = self.get_block_money(date, type='open')
         if len(self.buy_stocks_pool) > 0:
             for index, row in self.buy_stocks_pool.iterrows():
-                code = row['code']
-                price = self.get_price(code, date)
-                stock = self.profile.get_current_stock(code, date=date)
+                ts_code = row['ts_code']
+                price = self.get_open_price(ts_code, date)
+                if price is None:
+                    next
+                stock = self.profile.get_current_stock(ts_code, date=date)
                 if stock.count == 0 and 100 * price <= self.profile.get_money():
                     count = self.stock_int(block_money / price)
-                    self.profile.buy_stock(code, count, price, date=date)
+                    self.profile.buy_stock(ts_code, count, price, date=date)
                 elif stock.count != 0 and 100 * price <= self.profile.get_money() and stock.price < price:
                     count = self.stock_int(block_money / price)
-                    self.profile.buy_stock(code, count, price, date=date)
+                    self.profile.buy_stock(ts_code, count, price, date=date)
 
     def get_stocks_pool_thru_trend(self, date):
         '''
         根据长期sepa和基本面趋势模型
         获得股票池
         '''
-        all_codes_df = self.get_all_codes_df()
+        all_codes_df = self.stock_basic_df()
         data = []
-        labels = ['code', 'name', 'c_name']
+        labels = ['ts_code', 'code']
         indexes = []
         for index, row in all_codes_df.iterrows():
-            hist_df = self.get_h_data_df(row['code'], date)
-            growth_df = self.get_growth_data_df(row['code'], date)
-            if (hist_df is not None) and basic_method.sepa_step_check(hist_df, 3 * 20) and (growth_df is not None) and basic_method.growth_check(growth_df):
-                data.append((row['code'], row['name'], row['c_name']))
-                indexes.append(row['code'])
+            ts_code = row['ts_code']
+            code = row['code']
+            daily_df = self.get_daily_data_df(ts_code, date)
+            growth_df = self.get_growth_data_df(code, date)
+            if (daily_df is not None) and basic_method.sepa_step_check(daily_df, 3 * 20) and (growth_df is not None) and basic_method.growth_check(growth_df):
+                data.append((ts_code, code))
+                indexes.append(ts_code)
         df = pd.DataFrame.from_records(data, columns=labels, index=indexes)
         return df
 
@@ -207,31 +225,33 @@ class SepaDayBacktest(DayBacktest):
         stocks = self.current_stocks()
         session = Session()
         block_money = self.get_block_money(date, type='close')
+
         for stock in stocks:
             session.add(stock)
-
             max_price = stock.max_price or stock.price
-            code = stock.code
-            today_price = self.get_price(code, date)
+            ts_code = stock.code
+            today_price = self.get_price(ts_code, date)
+            if today_price is None:
+                continue
 
             # 止损卖出
             # 跌了移动平均线的10%，第二天全部卖出
             if today_price <= max_price * (1 - leave_level):
-                result.append({ 'code': code, 'count': stock.count })
+                result.append({ 'ts_code': ts_code, 'count': stock.count })
             # 止盈卖出
             # 20%的时候，卖出至少3/4
             elif ((today_price - stock.price) / stock.price >= top_level) and stock.count * today_price > block_money * 1/4:
                 if (stock.count * 1/2) >= 100:
-                    result.append({ 'code': code, 'count': self.stock_int(stock.count * 1/2) })
+                    result.append({ 'ts_code': ts_code, 'count': self.stock_int(stock.count * 1/2) })
                 else:
-                    result.append({ 'code': code, 'count': stock.count })
+                    result.append({ 'ts_code': ts_code, 'count': stock.count })
 
             # 15%的时候，卖出至少1/2
             elif ((today_price - stock.price) / stock.price >= top_level_1) and stock.count * today_price > block_money * 1/2:
                 if stock.count * 1/2 >= 100:
-                    result.append({ 'code': code, 'count': self.stock_int(stock.count * 1/2) })
+                    result.append({ 'ts_code': ts_code, 'count': self.stock_int(stock.count * 1/2) })
                 else:
-                    result.append({ 'code': code, 'count': stock.count })
+                    result.append({ 'ts_code': ts_code, 'count': stock.count })
 
             # 设置移动最大值，目的移动止损点
             if today_price > max_price:
@@ -247,9 +267,9 @@ class SepaDayBacktest(DayBacktest):
         '''
         获得明天需要买的股票
         '''
-        code_df = self.stocks_pool.copy()
+        codes_df = self.stocks_pool.copy()
         result = []
-        for index, row in code_df.iterrows():
-            df = self.get_h_data_df(row['code'], date)
+        for index, row in codes_df.iterrows():
+            df = self.get_daily_data_df(row['ts_code'], date)
             result.append(bm.revert_point_1(df))
-        return code_df.loc[result]
+        return codes_df.loc[result]

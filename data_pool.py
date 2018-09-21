@@ -17,16 +17,19 @@ global_profit_data = {}
 global_hist_data = {}
 global_daily_data = {}
 all_codes_df = []
+global_stock_basic_df = []
 # 抓取h_data的开始时间
 start_d = '2010-01-01'
 
 daily_start = '20100101'
 
 TOKEN = '415f2e5e4461aa8d71e8d0f2142e95007d19eaed3ed8d90eddf29f46'
-
 ts.set_token(TOKEN)
 
 pro = ts.pro_api()
+
+def daily_data_table_name(ts_code):
+    return "%s_daily"%(ts_code.replace('.', '_'))
 
 def get_daily_data_df(ts_code, date):
     '''
@@ -37,14 +40,16 @@ def get_daily_data_df(ts_code, date):
         df = global_daily_data[ts_code]
     else:
         df = get_daily_data(ts_code)
+        if df is not None:
+            df.index = pd.to_datetime(df.index)
+            df = df.sort_index(ascending=True)
+        global_daily_data[ts_code] = df
     if df is None:
         return df
-    df.index = pd.to_datetime(df.index)
-    df = df.sort_index(ascending=True)
     return df.loc[df.index <= date]
 
 def get_daily_data(ts_code):
-    table_name = "%s_daily"%(ts_code.replace('.', '_'))
+    table_name = daily_data_table_name(ts_code)
     if table_exists(table_name):
         df = read_df_from_db(table_name, index_col='date')
         df.index = pd.to_datetime(df.index)
@@ -55,15 +60,13 @@ def get_daily_data(ts_code):
 def fetch_daily_data_to_db(ts_code, end_date=None):
     '''
     抓日数据
-    20180914
-    603998.SH
     '''
     if end_date is None:
         end_date = datetime.now().strftime("%Y%m%d")
     if not isinstance(end_date, str):
         end_date = convert_date(end_date).strftime("%Y%m%d")
     start_date = get_daily_start_date(ts_code)
-    table_name = "%s_daily"%(ts_code.replace('.', '_'))
+    table_name = daily_data_table_name(ts_code)
     df = pro.daily(ts_code=ts_code, start_date=start_date, end_date=end_date)
     df.index = pd.to_datetime(df['trade_date'])
     df.index.name = 'date'
@@ -73,7 +76,7 @@ def fetch_daily_data_to_db(ts_code, end_date=None):
         df_to_db(table_name, df)
 
 def get_daily_start_date(ts_code):
-    table_name = "%s_daily"%(ts_code.replace('.', '_'))
+    table_name = daily_data_table_name(ts_code)
     if table_exists(table_name):
         old_df = get_daily_data(ts_code)
         if old_df is None or len(old_df) == 0:
@@ -110,9 +113,26 @@ def stock_basic_df():
     '''
     股票列表
     '''
-    df = read_df_from_db('stock_basic', index_col='ts_code')
-    df['ts_code'] = df.index
+    global global_stock_basic_df
+    if len(global_stock_basic_df) == 0:
+        df = read_df_from_db('stock_basic', index_col='ts_code')
+        df['ts_code'] = df.index
+        df['code'] = df['symbol']
+        global_stock_basic_df = df.copy()
+    else:
+        df = global_stock_basic_df.copy()
     return df
+
+def convert_code_to_ts_code(code):
+    '''
+    code to ts_code
+    '''
+    df = stock_basic_df()
+    df = df.loc[df['code'] == code]
+    if len(df) == 0:
+        return None
+    else:
+        return df.iloc[-1]['ts_code']
 
 def trade_cal(start_date, end_date):
     '''
@@ -152,21 +172,27 @@ def get_hist_data_df(code, date):
     df = df.loc[df.index <= date]
     return df
 
-def get_price(code, date):
+def get_price(ts_code, date):
     '''
     获得该天股票的close price
     '''
-    df = get_hist_data_df(code, date)
+    df = get_daily_data_df(ts_code, date)
     df = df.sort_index(ascending=True)
-    return df.tail(1)['close'].sum()
+    if df is None or len(df) == 0 or df.index[-1] != date:
+        return None
+    else:
+        return df.tail(1)['close'].sum()
 
-def get_open_price(code, date):
+def get_open_price(ts_code, date):
     '''
     获得该天股票的open price
     '''
-    df = get_hist_data_df(code, date)
+    df = get_daily_data_df(ts_code, date)
     df = df.sort_index(ascending=True)
-    return df.tail(1)['open'].sum()
+    if df is None or len(df) == 0 or df.index[-1] != date:
+        return None
+    else:
+        return df.tail(1)['open'].sum()
 
 def get_h_data(code):
     '''
@@ -269,6 +295,12 @@ def get_growth_data_df(code, date):
     df.index.name = 'date'
     return df
 
+def convert_ts_code_to_code(ts_code):
+    if '.' in ts_code:
+        return ts_code.split('.')[0]
+    else:
+        return ts_code
+
 def get_last_quarter(year, quarter):
     '''
     获得上个季度
@@ -322,8 +354,11 @@ def get_profit_data(year, quarter):
         df = read_df_from_db(table_name, index_col='code')
         df['code'] = df.index
     else:
-        df = ts.get_profit_data(year, quarter)
-        df_to_db(table_name, df)
+        try:
+            df = ts.get_profit_data(year, quarter)
+            df_to_db(table_name, df)
+        except OSError as e:
+            df = None
     return df
 
 def get_growth_data(year, quarter):
@@ -336,8 +371,11 @@ def get_growth_data(year, quarter):
         df = read_df_from_db(table_name, index_col='code')
         df['code'] = df.index
     else:
-        df = ts.get_growth_data(year, quarter)
-        df_to_db(table_name, df)
+        try:
+            df = ts.get_growth_data(year, quarter)
+            df_to_db(table_name, df)
+        except OSError as e:
+            df = None
     return df
 
 def get_growth_data_thru_code(code, year, quarter):

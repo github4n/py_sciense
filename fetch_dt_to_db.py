@@ -39,3 +39,8 @@ end_date = '20180915'
 codes_df = dp.stock_basic_df()
 for index, row in codes_df.iterrows():
     dp.fetch_daily_data_to_db(row['ts_code'], end_date=end_date)
+
+# ---------- 抓取股票的增长数据
+date = datetime.now()
+for index, row in codes_df.iterrows():
+    dp.get_growth_data_df(row['symbol'], date)
