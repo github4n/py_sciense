@@ -8,7 +8,7 @@ import numpy as np
 from datetime import datetime
 import pandas as pd
 
-engine = create_engine('mysql+pymysql://wpzero:1234@127.0.0.1/best_stocks', connect_args={'connect_timeout': 800})
+engine = create_engine('mysql+pymysql://wpzero:1234@127.0.0.1/best_stocks', pool_recycle=1, pool_size=100, max_overflow=100)
 metadata = MetaData()
 conn = engine.connect()
 Base = declarative_base()
@@ -93,6 +93,20 @@ class ProfileMixin(object):
     id = Column(Integer, primary_key=True)
     money = Column(Float)
 
+class ProfileList(object):
+    id = Column(Integer, primary_key=True)
+    # 现金
+    money = Column(Float)
+    # 股票列表
+    stocks = Column(JSON)
+    # 总金额
+    profile_account = Column(Float)
+    # 快照日期
+    date = Column(DateTime, nullable=False)
+
+class MProfileList(ProfileList, Base):
+    __tablename__ = 'm_profile_list'
+
 # 记录每一笔买入或者卖出
 class MRecord(RecordMixin, Base):
     __tablename__ = 'm_records'
@@ -105,6 +119,9 @@ class MStock(StockMixin, Base):
 # 股票账户
 class MProfile(ProfileMixin, Base):
     __tablename__ = 'm_profiles'
+
+class FProfileList(ProfileList, Base):
+    __tablename__ = 'f_profile_list'
 
 class FRecord(RecordMixin, Base):
     __tablename__ = 'f_records'
@@ -127,6 +144,14 @@ class Rps(Base):
 
 class ExtrsList(Base):
     __tablename__ = 'extrs_list'
+    id = Column(Integer, primary_key=True)
+    date = Column(DateTime, nullable=False)
+    days = Column(Integer, nullable=False)
+    data = Column(JSON)
+    __table_args__ = (Index('days', 'date'),)
+
+class SepaList(Base):
+    __tablename__ = 'sepa_list'
     id = Column(Integer, primary_key=True)
     date = Column(DateTime, nullable=False)
     days = Column(Integer, nullable=False)

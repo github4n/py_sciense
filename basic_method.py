@@ -7,8 +7,9 @@ import talib as ta
 import numpy as np
 from models import conn, industry_codes, engine, convert_date
 import datetime
+from datetime import timedelta
 import data_pool as dp
-from models import Session, Rps, ExtrsList
+from models import Session, Rps, ExtrsList, SepaList
 
 SMA_FAST = 50
 SMA_SLOW = 200
@@ -24,10 +25,52 @@ Y_AXIS_SIZE = 12
 
 CACHE = True
 
+def sepa_check_from_cache(ts_code, date, days):
+    '''
+    从已经算的数据库中返回结果
+    '''
+    sepa_list = sepa_list(date, days)
+    return (sepa_list is not None) and (ts_code in sepa_list)
+
+def sepa_list(date, days):
+    '''
+    符合sepa的列表
+    '''
+    date = convert_date(date)
+
+    if CACHE:
+        session = Session()
+        record = session.query(SepaList).filter_by(date=date, days=days).first()
+        if record is not None:
+            session.close()
+            return record.data
+
+    data = []
+    all_codes_df = dp.stock_basic_df()
+    for index, row in all_codes_df.iterrows():
+        ts_code = row['ts_code']
+        df = dp.get_daily_data_df(ts_code, date)
+        if df is None or len(df) == 0:
+            continue
+        df = df.sort_index(ascending=True)
+        today = df.index[-1]
+        if today < date - timedelta(days=5):
+            continue
+        if sepa_step_check(df, days):
+            data.append(ts_code)
+
+    if CACHE:
+        record = SepaList(date=date, days=days, data=data)
+        session.add(record)
+        session.commit()
+        session.close()
+
+    return data
+
 def sepa_step_check(df, days):
     '''
     1. 200天均线是递增的，并且坚持了days天数据
-    2. 当前收盘价大于五十天局限的值
+    2. 当前收盘价大于五十天均线的值
     3. 五十天天均线值大于一百五十天的均线值
     4. 一百五十天的均线值大于两百天的均线值
     5. 当前股价至少出于一年内最高股价的25%以内
@@ -54,9 +97,7 @@ def sepa_step_check(df, days):
     cur_sma50 = df.SMA50.values[0]
     cur_sma150 = df.SMA150.values[0]
     cur_sma200 = df.SMA200.values[0]
-    # <5>
     high_result = (one_year_max - cur_value)/one_year_max < 0.25
-    # <6>
     low_result = (cur_value - one_year_min)/one_year_min > 0.3
     return sma200_up_ndays and (cur_value >= cur_sma50) and (cur_sma50 > cur_sma150) and (cur_sma150 > cur_sma200) and high_result and low_result
 
@@ -454,39 +495,42 @@ def sma_uptrend(df, step=20):
     key = "SMA_%s_%s"%('close', step)
     return new_df[key].diff()[1:].sum() >= 0
 
-def rps(code, date, days=120):
+def rps(ts_code, date, days=120):
     '''
     计算RPS值
     '''
     date = convert_date(date)
     if CACHE:
         session = Session()
-        record = session.query(Rps).filter_by(code=code, date=date, days=days).first()
+        record = session.query(Rps).filter_by(code=ts_code, date=date, days=days).first()
         if record is not None:
+            session.close()
             return record.value
 
     result = 0
     sorted_list, codes_count = extrs_sorted_list(date, days=days)
-    ex = extrs(code, date, days=days)
+    ex = extrs(ts_code, date, days=days)
+
     if not (ex is None or ex not in sorted_list):
         location = sorted_list.index(ex)
         location = location + 1
         result = (1 - location/codes_count) * 100
+        if CACHE:
+            record = Rps(code=ts_code, date=date, days=days, value=result)
+            session.add(record)
+            session.commit()
+            session.close()
 
-    if CACHE:
-        record = Rps(code=code, date=date, days=days, value=result)
-        session.add(record)
-        session.commit()
     return result
 
-def extrs(code, date, days=120):
+def extrs(ts_code, date, days=120):
     '''
     计算extrs的值
     '''
     date = convert_date(date)
-    df = dp.get_hist_data_df(code, date)
-    if df is None:
-        print("%s df empty"%(code))
+    df = dp.get_daily_data_df(ts_code, date)
+    if df is None or len(df) == 0:
+        # print("%s df empty"%(ts_code))
         return None
     df = df.sort_index(ascending=True)
     today = df.index[-1]
@@ -507,19 +551,21 @@ def extrs_sorted_list(date, days=120):
         session = Session()
         record = session.query(ExtrsList).filter_by(date=date, days=days).first()
         if record is not None:
+            session.close()
             return sorted(record.data['scores'], reverse=True), record.data['codes_count']
 
     codes_count = 0
     scores = []
-    all_codes_df = dp.get_all_codes_df()
+    all_codes_df = dp.stock_basic_df()
     for index, row in all_codes_df.iterrows():
-        ex = extrs(row['code'], date, days)
+        ts_code = row['ts_code']
+        ex = extrs(ts_code, date, days)
         if ex is not None:
             scores.append(ex)
             codes_count = codes_count + 1
     scores = sorted(scores, reverse=True)
 
-    if CACHE:
+    if CACHE and codes_count != 0:
         record = ExtrsList(date=date, days=days, data={ 'scores': scores, 'codes_count': codes_count })
         session.add(record)
         session.commit()

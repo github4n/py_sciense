@@ -51,6 +51,7 @@ class DayBacktest:
                 self.sse_is_open = row['sse_is_open']
                 self.szse_is_open = row['szse_is_open']
                 self.today = row['date']
+                self.month = self.today.to_datetime().month
                 self.handle_bar(self.today)
 
     def get_daily_data_df(self, ts_code, date):
@@ -135,6 +136,23 @@ class DayBacktest:
         '''
         return data_pool.convert_code_to_ts_code(code)
 
+class ComputeRps(DayBacktest):
+    '''
+    计算RPS值
+    '''
+    def handle_bar(self, date):
+        all_codes_df = self.stock_basic_df()
+        for index, row in all_codes_df.iterrows():
+            ts_code = row['ts_code']
+            bm.rps(ts_code, date)
+
+class ComputeSepa(DayBacktest):
+    '''
+    计算每一天的sepa列表
+    '''
+    def handle_bar(self, date):
+        bm.sepa_list(date, 3 * 20)
+
 class TestDayBacktest(DayBacktest):
 
     def handle_bar(self, date):
@@ -161,6 +179,8 @@ class SepaDayBacktest(DayBacktest):
         self.sell_stocks_pool = self.get_sell_stocks_pool_thru_short_trend(date)
         # 第二天需要买的股票
         self.buy_stocks_pool = self.get_buy_stocks_pool_thru_short_trend(date)
+        # 记录分析表
+        self.snapshot(date)
 
     def sell_stocks(self, date):
         '''
@@ -273,3 +293,13 @@ class SepaDayBacktest(DayBacktest):
             df = self.get_daily_data_df(row['ts_code'], date)
             result.append(bm.revert_point_1(df))
         return codes_df.loc[result]
+
+    def snapshot(self, date):
+        '''
+        每一个月记录一次分析表
+        '''
+        if (not hasattr(self, 'last_month')) or self.last_month != self.month:
+            self.profile.snapshot(date)
+            self.last_month = self.month
+        else:
+            return None

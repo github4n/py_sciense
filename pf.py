@@ -1,4 +1,4 @@
-from models import Session, MRecord, MStock, MProfile, FRecord, FStock, FProfile, convert_date
+from models import Session, MRecord, MStock, MProfile, FRecord, FStock, FProfile, convert_date, FProfileList, MProfileList
 from datetime import datetime
 import tushare as ts
 import pandas as pd
@@ -154,6 +154,24 @@ class Pf:
         session.expunge_all()
         session.close()
 
+    def snapshot(self, date=None):
+        '''
+        记录某一时刻的股票情况
+        '''
+        try:
+            session = Session()
+            date = self.convert_date(date)
+            stocks = []
+            stocks_df = self.get_profile_stocks_df_thru_date(date, type='close')
+            for index, row in stocks_df.iterrows():
+                stocks.append({'code': row['code'], 'price': row['price'], 'trade_price': row['trade_price'], 'date': row['date'], 'count': row['count'], 'account': row['account']})
+            record = self.get_profile_list_class()(money=self.get_money(), profile_account=self.get_profile_account_thru_date(date, type='close'), date=date, stocks=stocks)
+            session.add(record)
+        except:
+            session.rollback()
+        finally:
+            session.close()
+
     def convert_to_py_type(self, v):
         '''
         转化为python默认的类型
@@ -202,3 +220,9 @@ class Pf:
             return MStock
         else:
             return FStock
+
+    def get_profile_list_class(self):
+        if self.t == 'm':
+            return MProfileList
+        else:
+            return FProfileList

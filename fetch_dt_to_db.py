@@ -4,6 +4,7 @@ import tushare as ts
 from datetime import datetime
 import data_pool as dp
 import time
+import backtest
 
 
 engine = create_engine('mysql+pymysql://root:1234@127.0.0.1/best_stocks')
@@ -28,11 +29,11 @@ sz_50.to_sql('sz_50_codes', engine, if_exists='replace', dtype={'date': sa.VARCH
 zz_500 = ts.get_zz500s()
 zz_500.to_sql('zz_500_codes', engine, if_exists='replace', dtype={'date': sa.VARCHAR(255)})
 
-# ---------- 抓股票池子
-dp.fetch_stock_basic_to_db()
-
 # ---------- 抓交易日期到股票池
 dp.fetch_trade_cal_to_db()
+
+# ---------- 抓股票池子
+dp.fetch_stock_basic_to_db()
 
 # ---------- 抓近期的daily数据
 end_date = '20180915'
@@ -44,3 +45,11 @@ for index, row in codes_df.iterrows():
 date = datetime.now()
 for index, row in codes_df.iterrows():
     dp.get_growth_data_df(row['symbol'], date)
+
+# ---------- 计算每天的rps
+c_rps = backtest.ComputeRps(start_date='2014-01-01', end_date='2018-09-01')
+c_rps.run()
+
+# ---------- 计算每天的sepa列表
+sepa = backtest.ComputeSepa(start_date='2014-01-01', end_date='2018-09-01')
+sepa.run()
