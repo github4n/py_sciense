@@ -158,5 +158,11 @@ class SepaList(Base):
     data = Column(JSON)
     __table_args__ = (Index('days', 'date'),)
 
+class FetchDataVersion(Base):
+    __tablename__ = 'fetch_data_version'
+    id = Column(Integer, primary_key=True)
+    date = Column(DateTime, nullable=False)
+    data = Column(JSON)
+
 # 用来创建数据库结构
 Base.metadata.create_all(engine)

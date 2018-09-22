@@ -5,6 +5,7 @@ from datetime import datetime
 import data_pool as dp
 import time
 import backtest
+from fetch_data import FetchData
 
 
 engine = create_engine('mysql+pymysql://root:1234@127.0.0.1/best_stocks')
@@ -53,3 +54,14 @@ c_rps.run()
 # ---------- 计算每天的sepa列表
 sepa = backtest.ComputeSepa(start_date='2014-01-01', end_date='2018-09-01')
 sepa.run()
+
+# ---------- 每天跑的更新数据
+fetch_data = FetchData()
+fetch_data.run()
+
+year = 2012
+quarter = 1
+for i in range(10):
+    if i != 0:
+        year, quarter = dp.get_last_quarter(year, quarter)
+    dp.get_growth_data(year, quarter)
