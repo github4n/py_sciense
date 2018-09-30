@@ -25,12 +25,21 @@ Y_AXIS_SIZE = 12
 
 CACHE = True
 
+def rps_check(df, x=80):
+    '''
+    rps当天至少大于x
+    '''
+    if df is None:
+        return False
+    today_rps = df.iloc[-1]['value']
+    return today_rps >= x
+
 def sepa_check_from_cache(ts_code, date, days):
     '''
     从已经算的数据库中返回结果
     '''
-    sepa_list = sepa_list(date, days)
-    return (sepa_list is not None) and (ts_code in sepa_list)
+    sp_list = sepa_list(date, days)
+    return (sp_list is not None) and (ts_code in sp_list)
 
 def sepa_list(date, days):
     '''
@@ -105,6 +114,8 @@ def growth_check(df, up_quarter=3, bigger_quarter=2, nprg_lowlevel=20, epsg_lowl
     '''
     基本面增速检测
     '''
+    if df is None:
+        return False
     rows = up_quarter if up_quarter > bigger_quarter else bigger_quarter
     rows = rows + step
     return len(df) >= rows and \
@@ -246,33 +257,54 @@ def add_bias(df, column='close', step=5):
     df[b_k] = ((df[column] - df[m_k]) / df[m_k]) * 100
     return df
 
-def revert_point_1(df):
+def basic_revert(df):
     '''
-    完整的vcp + 放阳
     1. close 的值增长了0.03以上
-    2. vol 的值增长了0.3以上
-    3. 20天平均线向上
-    4. 进五天有VCP的趋势
-    5. 成交量五天最高
+    2. close 减去 open增长了0.03以上
+    3. vol 的值增长了0.3以上
+    4. 20天平均线向上
     '''
-    result = True
-    result = result and \
-        open_sub_close_percentage(df, close_column='close', open_column='open', percentage=0.03) and \
+    result = open_sub_close_percentage(df, close_column='close', open_column='open', percentage=0.03) and \
+        high_percentage(df, column='close', percentage=0.03) and \
         high_percentage(df, column='vol', percentage=0.3) and \
         sma_uptrend(df) and \
         highest_in_days(df)
 
-    if not result:
-        return result
+    return result
 
+def revert_point_2(df):
+    '''
+    1. close 的值增长了0.03以上
+    2. close 减去 open增长了0.03以上
+    3. vol 的值增长了0.3以上
+    4. 20天平均线向上
+    5. ma5的线和ma20的至少五天相近
+    '''
+    before_df = df.iloc[:-1]
+
+    return basic_revert(df) and \
+        vol_lower(before_df, volume_column='vol', days=5, step=5) and \
+        ma_sub_abs_lower(before_df, column='close', days=6, long_step=20, short_step=5, percentage=0.7)
+
+def revert_point_1(df):
+    '''
+    完整的vcp + 放阳
+    1. close 的值增长了0.03以上
+    2. close 减去 open增长了0.03以上
+    3. vol 的值增长了0.3以上
+    4. 20天平均线向上
+    5. 近五天有VCP的趋势
+    6. 成交量五天最高
+    '''
     df_list = []
     for i in range(5):
         df_list.append(df.iloc[:(-1-i)])
+
     vcp_result = False
     for before_df in df_list:
         vcp_result = vcp_result or vcp(before_df)
 
-    return result and \
+    return basic_revert(df) and \
         vcp_result
 
 def highest_in_days(df, column='vol', days=5):
@@ -295,19 +327,22 @@ def vcp(df):
     return vcp_test_double_sma(df, days=10) or \
         vcp_test_double_sma(df, days=20) or \
         vcp_test_double_sma(df, days=30) or \
+        vcp_test_double_sma(df, days=40) or \
         vcp_test_double_ema(df, days=10) or \
         vcp_test_double_ema(df, days=20) or \
         vcp_test_double_ema(df, days=30) or \
+        vcp_test_double_ema(df, days=40) or \
         vcp_test(df, days=10) or \
         vcp_test(df, days=20) or \
-        vcp_test(df, days=30)
+        vcp_test(df, days=30) or \
+        vcp_test(df, days=40)
 
 
 def vcp_test_double_sma(df, volume_column='vol', close_column='close', days=10, v_days=5):
     '''
     VCP的检测
     '''
-    return lower(df, column=volume_column, days=v_days) and \
+    return vol_lower(df, volume_column=volume_column, days=v_days) and \
         bias_lower_double_sma(df, column=close_column, days=days)
 
 
@@ -315,13 +350,25 @@ def vcp_test_double_ema(df, volume_column='vol', close_column='close', days=10, 
     '''
     VCP的检测
     '''
-    return lower(df, column=volume_column, days=v_days) and \
+    return vol_lower(df, volume_column=volume_column, days=v_days) and \
         bias_lower_double_ema(df, column=close_column, days=days)
 
 
 def vcp_test(df, volume_column='vol', close_column='close', days=10, v_days=5):
-    return lower(df, column=volume_column, days=v_days) and \
+    '''
+    VCP的检测
+    '''
+    return vol_lower(df, volume_column=volume_column, days=v_days) and \
         bias_lower(df, column=close_column, days=days)
+
+def vol_lower(df, volume_column='vol', days=5, step=5):
+    '''
+    交易量收缩
+    '''
+    df = add_sma(df, volume_column, step)
+    k1 = sma_key(volume_column, step)
+    return lower(df, column=k1, days=days, percentage=1) or \
+        lower(df, column=volume_column, days=days, percentage=0.7)
 
 
 def ma_sub_abs_lower(df, column='close', days=10, long_step=20, short_step=5, percentage=0.7):
@@ -336,8 +383,10 @@ def ma_sub_abs_lower(df, column='close', days=10, long_step=20, short_step=5, pe
     k1 = sma_key(column, long_step)
     k2 = sma_key(column, short_step)
     df[k] = (df[k1] - df[k2]).abs()
+    df = add_sma(df, k, short_step)
+    abs_sma_k = sma_key(k, short_step)
     test_k = 'ma_sub_test'
-    df[test_k] = np.where(df[k] <= df[k].shift(1), 1, 0)
+    df[test_k] = np.where(df[abs_sma_k] <= df[abs_sma_k].shift(1), 1, 0)
     df = df.tail(days)
     return (len(df.loc[df[test_k] == 1]) / len(df)) >= percentage
 
@@ -351,6 +400,17 @@ def lower(df, column='vol', days=10, percentage=0.7):
     volume_df[volume_lower_k] = np.where(volume_df[column] <= volume_df[column].shift(1), 1, 0)
     volume_df = volume_df.tail(days)
     return (len(volume_df.loc[volume_df[volume_lower_k] == 1]) / len(volume_df)) >= percentage
+
+def higher(df, column='value', days=30, percentage=0.7):
+    '''
+    value的递增
+    '''
+    value_df = df.copy()
+    value_df = value_df.sort_index(ascending=True)
+    value_higher_k = 'value_higher_test'
+    value_df[value_higher_k] = np.where(value_df[column] >= value_df[column].shift(1), 1, 0)
+    value_df = value_df.tail(days)
+    return (len(value_df.loc[value_df[value_higher_k] == 1]) / len(value_df)) >= percentage
 
 def bias_lower(df, column='close', days=10, short_step=5, long_step=20, percentage=0.7):
     close_df = df.copy()

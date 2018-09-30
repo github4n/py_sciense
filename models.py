@@ -158,6 +158,7 @@ class SepaList(Base):
     data = Column(JSON)
     __table_args__ = (Index('days', 'date'),)
 
+# 这个model用于存储，每天更新的数据的时间记录
 class FetchDataVersion(Base):
     __tablename__ = 'fetch_data_version'
     id = Column(Integer, primary_key=True)

@@ -50,14 +50,18 @@ class FetchData():
         '''
         计算rps
         '''
-        c_rps = backtest.ComputeRps(start_date=self.start_date, end_date=self.end_date)
+        start_date = datetime.strptime(self.start_date, '%Y%m%d').strftime('%Y-%m-%d')
+        end_date = datetime.strptime(self.end_date, '%Y%m%d').strftime('%Y-%m-%d')
+        c_rps = backtest.ComputeRps(start_date=start_date, end_date=end_date)
         c_rps.run()
 
     def compute_sepa(self):
         '''
         计算sepa
         '''
-        sepa = backtest.ComputeSepa(start_date=self.start_date, end_date=self.end_date)
+        start_date = datetime.strptime(self.start_date, '%Y%m%d').strftime('%Y-%m-%d')
+        end_date = datetime.strptime(self.end_date, '%Y%m%d').strftime('%Y-%m-%d')
+        sepa = backtest.ComputeSepa(start_date=start_date, end_date=end_date)
         sepa.run()
 
     def version(self):

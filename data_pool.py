@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.sql import select
 import talib as ta
 import numpy as np
-from models import conn, industry_codes, engine, convert_date
+from models import conn, industry_codes, engine, convert_date, Rps
 from datetime import datetime, timedelta
 from sqlalchemy.sql import select
 from models import Session, FRecord, FStock, FProfile, industry_codes, table_exists, df_to_db
@@ -16,6 +16,7 @@ global_growth_data = {}
 global_profit_data = {}
 global_hist_data = {}
 global_daily_data = {}
+global_rps_data = {}
 all_codes_df = []
 global_stock_basic_df = []
 # 抓取h_data的开始时间
@@ -401,3 +402,37 @@ def get_growth_data_thru_code(code, year, quarter):
         return None
     else:
         return df[df['code'] == code]
+
+def rps_data_df(ts_code, date, days=120):
+    '''
+    获得该日期以内的df
+    '''
+    df = rps_data(ts_code, days=days)
+    return df.loc[df.index <= date]
+
+def rps_data(ts_code, days=120):
+    '''
+    获得rps的数据
+    '''
+    global global_rps_data
+    if ts_code in global_rps_data:
+        df = global_rps_data[ts_code]
+        if df is not None:
+            df = df.copy()
+        return df
+    else:
+        session = Session()
+        labels = ['value', 'days']
+        data = []
+        indexes = []
+        rps_records = session.query(Rps).filter_by(code=ts_code, days=days).all()
+        for rps_record in rps_records:
+            data.append((rps_record.value, rps_record.days))
+            indexes.append(rps_record.date.strftime('%Y-%m-%d'))
+        df = pd.DataFrame.from_records(data, columns=labels, index=indexes)
+        df.index = pd.to_datetime(df.index)
+        df.index.name = 'date'
+        df = df.sort_index(ascending=True)
+        global_rps_data[ts_code] = df.copy()
+        session.close()
+        return df

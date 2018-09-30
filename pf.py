@@ -164,10 +164,19 @@ class Pf:
             stocks = []
             stocks_df = self.get_profile_stocks_df_thru_date(date, type='close')
             for index, row in stocks_df.iterrows():
-                stocks.append({'code': row['code'], 'price': row['price'], 'trade_price': row['trade_price'], 'date': row['date'], 'count': row['count'], 'account': row['account']})
-            record = self.get_profile_list_class()(money=self.get_money(), profile_account=self.get_profile_account_thru_date(date, type='close'), date=date, stocks=stocks)
+                stock_d = self.convert_date(row['date'])
+                stock_d = None if stock_d is None else stock_d.strftime('%Y-%m-%d')
+                stocks.append({'code': self.convert_to_py_type(row['code']),
+                               'price': self.convert_to_py_type(row['price']),
+                               'trade_price': self.convert_to_py_type(row['trade_price']),
+                               'date': stock_d,
+                               'count': self.convert_to_py_type(row['count']),
+                               'account': self.convert_to_py_type(row['account'])})
+            record = self.get_profile_list_class()(money=self.convert_to_py_type(self.get_money()), profile_account=self.convert_to_py_type(self.get_profile_account_thru_date(date, type='close')), date=date, stocks=stocks)
             session.add(record)
-        except:
+            session.commit()
+        except Exception as e:
+            print("%s"%(str(e)))
             session.rollback()
         finally:
             session.close()

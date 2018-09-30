@@ -5,7 +5,7 @@ import stock_pool as sp
 import tushare as ts
 from datetime import datetime
 from models import conn
-from models import Session, FRecord, FStock, FProfile, industry_codes
+from models import Session, FRecord, FStock, FProfile, industry_codes, FProfileList
 import talib as ta
 from sqlalchemy.sql import select
 import basic_method
@@ -29,7 +29,7 @@ class DayBacktest:
         self.buy_stocks_pool = []
 
     def truncate_tables(self):
-        for model in [FRecord, FStock, FProfile]:
+        for model in [FRecord, FStock, FProfile, FProfileList]:
             conn.execute(model.__table__.delete())
 
     def handle_bar(self, date):
@@ -51,7 +51,7 @@ class DayBacktest:
                 self.sse_is_open = row['sse_is_open']
                 self.szse_is_open = row['szse_is_open']
                 self.today = row['date']
-                self.month = self.today.to_datetime().month
+                self.month = self.today.to_pydatetime().month
                 self.handle_bar(self.today)
 
     def get_daily_data_df(self, ts_code, date):
@@ -136,6 +136,12 @@ class DayBacktest:
         '''
         return data_pool.convert_code_to_ts_code(code)
 
+    def rps_data_df(self, ts_code, date, days=120):
+        '''
+        获得rps的df
+        '''
+        return data_pool.rps_data_df(ts_code, date)
+
 class ComputeRps(DayBacktest):
     '''
     计算RPS值
@@ -153,12 +159,20 @@ class ComputeSepa(DayBacktest):
     def handle_bar(self, date):
         bm.sepa_list(date, 3 * 20)
 
-class TestDayBacktest(DayBacktest):
+class RevertOneDayBacktest(DayBacktest):
 
     def handle_bar(self, date):
         ts_code = self.convert_code_to_ts_code('603568')
         df = self.get_daily_data_df(ts_code, date)
         if bm.revert_point_1(df):
+            print(date)
+
+class RevertTwoDayBacktest(DayBacktest):
+
+    def handle_bar(self, date):
+        ts_code = self.convert_code_to_ts_code('002228')
+        df = self.get_daily_data_df(ts_code, date)
+        if bm.revert_point_2(df):
             print(date)
 
 class SepaDayBacktest(DayBacktest):
@@ -167,6 +181,7 @@ class SepaDayBacktest(DayBacktest):
         '''
         每个时间窗口的处理函数
         '''
+        print('%s\n'%(date.to_pydatetime().strftime('%Y-%m-%d')))
         # -------------------- 早上买和卖
         # 卖昨天指定需要卖的票
         self.sell_stocks(date)
@@ -179,6 +194,12 @@ class SepaDayBacktest(DayBacktest):
         self.sell_stocks_pool = self.get_sell_stocks_pool_thru_short_trend(date)
         # 第二天需要买的股票
         self.buy_stocks_pool = self.get_buy_stocks_pool_thru_short_trend(date)
+
+        if len(self.sell_stocks_pool) > 0:
+            print('有%s股代码要卖'%(len(self.sell_stocks_pool)))
+        if len(self.buy_stocks_pool) > 0:
+            print('有%s股代码要买'%(len(self.buy_stocks_pool)))
+
         # 记录分析表
         self.snapshot(date)
 
@@ -223,12 +244,15 @@ class SepaDayBacktest(DayBacktest):
         data = []
         labels = ['ts_code', 'code']
         indexes = []
+        # 牛市的时候应该适当提高
+        # 熊市的时候应该适当降低
+        epsg_low_level = 40
         for index, row in all_codes_df.iterrows():
             ts_code = row['ts_code']
             code = row['code']
-            daily_df = self.get_daily_data_df(ts_code, date)
             growth_df = self.get_growth_data_df(code, date)
-            if (daily_df is not None) and basic_method.sepa_step_check(daily_df, 3 * 20) and (growth_df is not None) and basic_method.growth_check(growth_df):
+            # basic_method.has_growth_than_x_for_n_quarters(growth_df, 1, epsg_low_level, type='epsg')
+            if basic_method.sepa_check_from_cache(ts_code, date, 3 * 20) and basic_method.rps_check(self.rps_data_df(ts_code, date)) and basic_method.growth_check(growth_df):
                 data.append((ts_code, code))
                 indexes.append(ts_code)
         df = pd.DataFrame.from_records(data, columns=labels, index=indexes)
@@ -239,9 +263,13 @@ class SepaDayBacktest(DayBacktest):
         获得明天需要卖掉的股票
         '''
         result = []
-        leave_level = 0.10
+
+        leave_level = 0.06
+        leave_level_1 = 0.10
+
         top_level = 0.20
         top_level_1 = 0.15
+
         stocks = self.current_stocks()
         session = Session()
         block_money = self.get_block_money(date, type='close')
@@ -249,14 +277,19 @@ class SepaDayBacktest(DayBacktest):
         for stock in stocks:
             session.add(stock)
             max_price = stock.max_price or stock.price
+            price = stock.price
             ts_code = stock.code
             today_price = self.get_price(ts_code, date)
             if today_price is None:
                 continue
 
+            # 当股价没有涨过0.05就直接跌，那么0.08的跌幅离开
+            # 当股价涨过了0.05，那么0.10的跌幅离开
+            l_level = leave_level if ((max_price - price) / price) <= 0.05 else leave_level_1
+
             # 止损卖出
             # 跌了移动平均线的10%，第二天全部卖出
-            if today_price <= max_price * (1 - leave_level):
+            if today_price <= max_price * (1 - l_level):
                 result.append({ 'ts_code': ts_code, 'count': stock.count })
             # 止盈卖出
             # 20%的时候，卖出至少3/4
@@ -291,7 +324,7 @@ class SepaDayBacktest(DayBacktest):
         result = []
         for index, row in codes_df.iterrows():
             df = self.get_daily_data_df(row['ts_code'], date)
-            result.append(bm.revert_point_1(df))
+            result.append(bm.revert_point_2(df))
         return codes_df.loc[result]
 
     def snapshot(self, date):
@@ -299,7 +332,6 @@ class SepaDayBacktest(DayBacktest):
         每一个月记录一次分析表
         '''
         if (not hasattr(self, 'last_month')) or self.last_month != self.month:
+            print('记录分析表..........')
             self.profile.snapshot(date)
             self.last_month = self.month
-        else:
-            return None
